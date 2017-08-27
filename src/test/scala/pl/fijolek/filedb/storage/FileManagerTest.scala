@@ -21,8 +21,15 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     columnsDefinition = List(
       Column("ID", ColumnTypes.Varchar(5)),
       Column("name", ColumnTypes.Varchar(20))
-    ),
-    searchKey = "ID"
+    )
+  )
+
+  val largeInstructorTableData = TableData(
+    name = "instructor",
+    columnsDefinition = List(
+      Column("ID", ColumnTypes.Varchar(5)),
+      Column("name", ColumnTypes.Varchar(2000))
+    )
   )
 
   feature("system catalog") {
@@ -41,10 +48,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     scenario("should be able to insert some record and retrieve it") {
       val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
       val fileManager = new FileManager(systemCatalogManager)
-      val record = Record(List(
-        Value(Column("ID", ColumnTypes.Varchar(5)), "123"),
-        Value(Column("name", ColumnTypes.Varchar(20)), "abc")
-      ))
+      val record = instructorRecord("123", "abc")
       val records = List(record)
       systemCatalogManager.addTable(instructorTableData)
 
@@ -57,14 +61,8 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     scenario("should be able to insert 2 records and retrieve them") {
       val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
       val fileManager = new FileManager(systemCatalogManager)
-      val record = Record(List(
-        Value(Column("ID", ColumnTypes.Varchar(5)), "123"),
-        Value(Column("name", ColumnTypes.Varchar(20)), "abc")
-      ))
-      val record2 = Record(List(
-        Value(Column("ID", ColumnTypes.Varchar(5)), "234"),
-        Value(Column("name", ColumnTypes.Varchar(20)), "bcd")
-      ))
+      val record = instructorRecord("123", "abc")
+      val record2 = instructorRecord("234", "bcd")
       val records = List(record, record2)
       systemCatalogManager.addTable(instructorTableData)
 
@@ -77,18 +75,9 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     scenario("should be able to delete record") {
       val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
       val fileManager = new FileManager(systemCatalogManager)
-      val record = Record(List(
-        Value(Column("ID", ColumnTypes.Varchar(5)), "123"),
-        Value(Column("name", ColumnTypes.Varchar(20)), "abc")
-      ))
-      val record2 = Record(List(
-        Value(Column("ID", ColumnTypes.Varchar(5)), "234"),
-        Value(Column("name", ColumnTypes.Varchar(20)), "bcd")
-      ))
-      val record3 = Record(List(
-        Value(Column("ID", ColumnTypes.Varchar(5)), "345"),
-        Value(Column("name", ColumnTypes.Varchar(20)), "cde")
-      ))
+      val record = instructorRecord("123", "abc")
+      val record2 = instructorRecord("234", "bcd")
+      val record3 = instructorRecord("345", "cde")
       val records = List(record, record2, record3)
       systemCatalogManager.addTable(instructorTableData)
 
@@ -103,6 +92,54 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
       recordsReadAfterDeletion shouldBe List(record, record3)
     }
 
+    scenario("should be able to store more than one page data (page is 4k)") {
+      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
+      val fileManager = new FileManager(systemCatalogManager)
+      val record = largeInstructorRecord("123", "abc")
+      val record2 = largeInstructorRecord("234", "bcd")
+      val record3 = largeInstructorRecord("345", "cde")
+
+      val records = List(record, record2, record3)
+      systemCatalogManager.addTable(largeInstructorTableData)
+
+      fileManager.insertRecords(largeInstructorTableData.name, records)
+
+      val recordsRead = fileManager.readRecords(largeInstructorTableData.name)
+      recordsRead shouldBe records
+    }
+
+    scenario("should be able to store more than one page data (page is 4k) when data inserted in separate batches") {
+      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
+      val fileManager = new FileManager(systemCatalogManager)
+      val record = largeInstructorRecord("123", "abc")
+      val record2 = largeInstructorRecord("234", "bcd")
+      val record3 = largeInstructorRecord("345", "cde")
+
+      val records = List(record, record2, record3)
+      systemCatalogManager.addTable(largeInstructorTableData)
+
+      fileManager.insertRecords(largeInstructorTableData.name, List(record, record2))
+      fileManager.insertRecords(largeInstructorTableData.name, List(record3))
+
+      val recordsRead = fileManager.readRecords(largeInstructorTableData.name)
+      recordsRead shouldBe records
+    }
+
   }
+
+  def instructorRecord(id: String, name: String): Record = {
+    Record(List(
+      Value(Column("ID", ColumnTypes.Varchar(5)), id),
+      Value(Column("name", ColumnTypes.Varchar(20)), name)
+    ))
+  }
+
+  def largeInstructorRecord(id: String, name: String): Record = {
+    Record(List(
+      Value(Column("ID", ColumnTypes.Varchar(5)), id),
+      Value(Column("name", ColumnTypes.Varchar(2000)), name)
+    ))
+  }
+
 
 }

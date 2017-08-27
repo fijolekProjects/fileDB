@@ -7,24 +7,54 @@ import java.util
 
 import pl.fijolek.filedb.storage.ColumnTypes.ColumnType
 
+import scala.collection.immutable.TreeMap
 import scala.collection.mutable.ArrayBuffer
 
-// - record ahs to be smaller than buffer
+// - record has to be smaller than buffer
 // - fixed-length records only
 // - heap file organization
+// - unspanned records
 class FileManager(systemCatalogManager: SystemCatalogManager) {
-  val buffer = new Array[Byte](4096)
+  private val bufferSize = 4096
+  private val buffer: Array[Byte] = emptyBuffer()
+
+  private def emptyBuffer() = {
+    new Array[Byte](bufferSize)
+  }
+
+  private def clearBuffer(): Unit = {
+    System.arraycopy(emptyBuffer(), 0, buffer, 0, bufferSize)
+  }
 
   def insertRecords(tableName: String, records: List[Record]): Unit = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
     val file = new RandomAccessFile(storedTableData.filePath, "rw")
-    file.seek(file.length())
-    val bytesToWrite = records.toArray.flatMap(_.toBytes)
+    val fileSize = file.length()
+
+    val toWrite = records.zipWithIndex.map { case (record, index) =>
+      val offsetStart = fileSize + storedTableData.data.recordSize * index
+      val offsetAfterWrite = offsetStart + storedTableData.data.recordSize
+      val lastPageNumber = offsetStart / bufferSize
+      if (offsetAfterWrite / bufferSize == lastPageNumber) {
+        (lastPageNumber, record.toBytes)
+      } else {
+        val offsetEndOfPage = (lastPageNumber + 1) * bufferSize
+        val freeSpaceSize = (offsetEndOfPage - offsetStart).toInt
+        val freeSpace = new Array[Byte](freeSpaceSize)
+        (lastPageNumber + 1, freeSpace ++ record.toBytes)
+      }
+    }
+    val toWriteMap = toWrite.groupBy(_._1).mapValues(_.flatMap(_._2).toArray)
+    val sortedMap = TreeMap(toWriteMap.toSeq: _*)
     try {
-      file.write(bytesToWrite)
+      file.seek(fileSize)
+      sortedMap.foreach { case (_, bytes) =>
+        file.write(bytes)
+      }
     } finally {
       file.close()
     }
+    ()
   }
 
   //TODO make it lazy? or fetch just n buffers
@@ -46,6 +76,7 @@ class FileManager(systemCatalogManager: SystemCatalogManager) {
       }
     } finally {
       file.close()
+      clearBuffer()
     }
     records.toList
   }
@@ -78,6 +109,7 @@ class FileManager(systemCatalogManager: SystemCatalogManager) {
       }
     } finally {
       file.close()
+      clearBuffer()
     }
   }
 
@@ -105,18 +137,18 @@ case class SystemCatalog(tables: List[StoredTableData]) {
   val tablesByName = tables.map(table => (table.data.name, table)).toMap
 }
 case class StoredTableData(data: TableData, filePath: String)
-case class TableData(name: String, columnsDefinition: List[Column], searchKey: String) {
+case class TableData(name: String, columnsDefinition: List[Column]) {
   val recordSize: Int = {
     columnsDefinition.map(_.typ.sizeInBytes).sum
   }
 
   def readRecord(buffer: Array[Byte], recordIndex: Int): Option[Record] = {
-    val recordBuffer = util.Arrays.copyOfRange(buffer, recordIndex * recordSize, recordIndex * recordSize + recordSize)
-    if (recordBuffer.forall(_ == 0)) {
+    val recordBytes = util.Arrays.copyOfRange(buffer, recordIndex * recordSize, recordIndex * recordSize + recordSize)
+    if (recordBytes.forall(_ == 0)) {
       None
     } else {
       val (recordFields, _) = columnsDefinition.foldLeft((List.empty[Value], 0)) { case ((values, offset), colDef) =>
-        val columnBytes = util.Arrays.copyOfRange(recordBuffer, offset, offset + colDef.typ.sizeInBytes)
+        val columnBytes = util.Arrays.copyOfRange(recordBytes, offset, offset + colDef.typ.sizeInBytes)
         val value: Any = colDef.typ match {
           case _: ColumnTypes.Varchar =>
             new String(columnBytes.takeWhile(_ != 0))
@@ -161,7 +193,7 @@ case class Record(values: List[Value]) {
           util.Arrays.copyOf(bytes, sizeInBytes)
         case numType: ColumnTypes.Numeric =>
 //          val bytes = value.value.asInstanceOf[BigDecimal].setScale(numType.scale).underlying().unscaledValue().toByteArray
-//          watch out for litte/big endian - BigInteger assumes big-endian
+//          watch out for little/big endian - BigInteger assumes big-endian
 //          System.arraycopy(bytes, 0, bytesToWrite, sizeInBytes - bytes.length, bytes.length)
 //          bytesToWrite
           ???

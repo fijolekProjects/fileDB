@@ -16,44 +16,13 @@ import scala.collection.mutable.ArrayBuffer
 // - unspanned records
 class FileManager(systemCatalogManager: SystemCatalogManager) {
   private val bufferSize = 4096
-  private val buffer: Array[Byte] = emptyBuffer()
-
-  private def emptyBuffer() = {
-    new Array[Byte](bufferSize)
-  }
-
-  private def clearBuffer(): Unit = {
-    System.arraycopy(emptyBuffer(), 0, buffer, 0, bufferSize)
-  }
 
   def insertRecords(tableName: String, records: List[Record]): Unit = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
     val file = new RandomAccessFile(storedTableData.filePath, "rw")
     val fileSize = file.length()
-
-    val toWrite = records.zipWithIndex.map { case (record, index) =>
-      val offsetStart = fileSize + storedTableData.data.recordSize * index
-      val offsetAfterWrite = offsetStart + storedTableData.data.recordSize
-      val lastPageNumber = offsetStart / bufferSize
-      if (offsetAfterWrite / bufferSize == lastPageNumber) {
-        (lastPageNumber, record.toBytes)
-      } else {
-        val offsetEndOfPage = (lastPageNumber + 1) * bufferSize
-        val freeSpaceSize = (offsetEndOfPage - offsetStart).toInt
-        val freeSpace = new Array[Byte](freeSpaceSize)
-        (lastPageNumber + 1, freeSpace ++ record.toBytes)
-      }
-    }
-    val toWriteMap = toWrite.groupBy(_._1).mapValues(_.flatMap(_._2).toArray)
-    val sortedMap = TreeMap(toWriteMap.toSeq: _*)
-    try {
-      file.seek(fileSize)
-      sortedMap.foreach { case (_, bytes) =>
-        file.write(bytes)
-      }
-    } finally {
-      file.close()
-    }
+    val bytesToWrite = storedTableData.data.prepareWrite(records, fileSize, bufferSize)
+    FileUtils.append(file, bytesToWrite)
     ()
   }
 
@@ -62,21 +31,9 @@ class FileManager(systemCatalogManager: SystemCatalogManager) {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
     val file = new RandomAccessFile(storedTableData.filePath, "rw")
     val records = new ArrayBuffer[Record]()
-    var bytesRead = -1
-    try {
-      while ( {
-        bytesRead = file.read(buffer)
-        bytesRead != -1
-      }) {
-        val recordsInBuffer = bytesRead / storedTableData.data.recordSize
-        (0 until recordsInBuffer).foreach { index =>
-          val record = storedTableData.data.readRecord(buffer, index)
-          record.foreach(records += _)
-        }
-      }
-    } finally {
-      file.close()
-      clearBuffer()
+    FileUtils.traverse(file, bufferSize) { (buffer, bytesRead) =>
+      val recordsRead = storedTableData.data.readRecords(buffer, bytesRead)
+      records ++= recordsRead
     }
     records.toList
   }
@@ -84,32 +41,12 @@ class FileManager(systemCatalogManager: SystemCatalogManager) {
   def deleteRecord(tableName: String, record: Record): Unit = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
     val file = new RandomAccessFile(storedTableData.filePath, "rw")
-    var bytesRead = -1
     var currentFileOffset = 0
-
-    try {
-      while ( {
-        bytesRead = file.read(buffer)
-        bytesRead != -1
-      }) {
-        val recordsInBuffer = bytesRead / storedTableData.data.recordSize
-        (0 until recordsInBuffer).foreach { index =>
-          val readRecord = storedTableData.data.readRecord(buffer, index)
-          readRecord.foreach { rec =>
-            if (rec == record) {
-              val emptyBytes = new Array[Byte](storedTableData.data.recordSize)
-              val currentOffset = index * storedTableData.data.recordSize
-              System.arraycopy(emptyBytes, 0, buffer, currentOffset, emptyBytes.length)
-            }
-          }
-        }
-        file.seek(currentFileOffset)
-        file.write(buffer)
-        currentFileOffset += bytesRead
-      }
-    } finally {
-      file.close()
-      clearBuffer()
+    FileUtils.traverse(file, bufferSize) { (buffer, bytesRead) =>
+      val bufferWithDeletedRecord = storedTableData.data.prepareDelete(record, buffer, bytesRead)
+      file.seek(currentFileOffset)
+      file.write(bufferWithDeletedRecord)
+      currentFileOffset += bytesRead
     }
   }
 
@@ -142,7 +79,15 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
     columnsDefinition.map(_.typ.sizeInBytes).sum
   }
 
-  def readRecord(buffer: Array[Byte], recordIndex: Int): Option[Record] = {
+  def readRecords(buffer: Array[Byte], bytesRead: Int): List[Record] = {
+    val recordsInBuffer = bytesRead / recordSize
+    (0 until recordsInBuffer).flatMap { index =>
+      val record = readRecord(buffer, index)
+      record
+    }.toList
+  }
+
+  private def readRecord(buffer: Array[Byte], recordIndex: Int): Option[Record] = {
     val recordBytes = util.Arrays.copyOfRange(buffer, recordIndex * recordSize, recordIndex * recordSize + recordSize)
     if (recordBytes.forall(_ == 0)) {
       None
@@ -160,6 +105,46 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
       }
       Some(Record(recordFields))
     }
+  }
+
+  def prepareWrite(records: List[Record], fileSize: Long, bufferSize: Int): List[Array[Byte]] = {
+    val toWrite = records.zipWithIndex.map { case (record, index) =>
+      val offsetStart = fileSize + recordSize * index
+      val offsetAfterWrite = offsetStart + recordSize
+      val lastPageNumber = offsetStart / bufferSize
+      if (offsetAfterWrite / bufferSize == lastPageNumber) {
+        (lastPageNumber, record.toBytes)
+      } else {
+        val offsetEndOfPage = (lastPageNumber + 1) * bufferSize
+        val freeSpaceSize = (offsetEndOfPage - offsetStart).toInt
+        val freeSpace = new Array[Byte](freeSpaceSize)
+        (lastPageNumber + 1, freeSpace ++ record.toBytes)
+      }
+    }
+    val toWriteMap = toWrite.groupBy(_._1).mapValues(_.flatMap(_._2).toArray)
+    val sortedMap = TreeMap(toWriteMap.toSeq: _*)
+    sortedMap.values.toList
+  }
+
+  def prepareDelete(record: Record, buffer: Array[Byte], bytesRead: Int): Array[Byte] = {
+    val recordsInBuffer = bytesRead / recordSize
+    val deleteBufferOffsets = (0 until recordsInBuffer).flatMap { index =>
+      val recordRead = readRecord(buffer, index)
+      recordRead.flatMap { rec =>
+        if (rec == record) {
+          val currentOffset = index * recordSize
+          Some(currentOffset)
+        } else {
+          None
+        }
+      }
+    }
+    val bufferWithDeletedRecord = deleteBufferOffsets.foldLeft(util.Arrays.copyOf(buffer, buffer.length)) { case (bufferWithDeleted, offset) =>
+      val emptyBytes = new Array[Byte](recordSize)
+      System.arraycopy(emptyBytes, 0, bufferWithDeleted, offset, emptyBytes.length)
+      bufferWithDeleted
+    }
+    bufferWithDeletedRecord
   }
 
 }
@@ -205,3 +190,33 @@ case class Record(values: List[Value]) {
 }
 //TODO make column type and value type equal
 case class Value(column: Column, value: Any)
+
+
+object FileUtils {
+  def traverse(file: RandomAccessFile, bufferSize: Int)(process: (Array[Byte], Int) => Unit): Unit = {
+    val buffer = new Array[Byte](bufferSize)
+    var bytesRead = -1
+    try {
+      while ( {
+        bytesRead = file.read(buffer)
+        bytesRead != -1
+      }) {
+        process(buffer, bytesRead)
+      }
+    } finally {
+      file.close()
+    }
+  }
+
+  def append(file: RandomAccessFile, pages: List[Array[Byte]]): Unit = {
+    val fileSize = file.length()
+    try {
+      file.seek(fileSize)
+      pages.foreach { page =>
+        file.write(page)
+      }
+    } finally {
+      file.close()
+    }
+  }
+}

@@ -3,17 +3,25 @@ package pl.fijolek.filedb.storage
 import java.nio.file.{Files, Paths}
 
 import org.scalatest.{BeforeAndAfterEach, FeatureSpec, Matchers}
+import pl.fijolek.filedb.storage.ColumnTypes.Varchar
 
 class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
+  val basePath = "/tmp/filedb"
+  val systemCatalogManager = new SystemCatalogManager(basePath)
+  val fileManager = new FileManager(systemCatalogManager)
+
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    Files.deleteIfExists(Paths.get("/tmp/filedb/instructor"))
+    Files.deleteIfExists(Paths.get(basePath, "instructor"))
+    Files.deleteIfExists(Paths.get(basePath, "table"))
+    Files.deleteIfExists(Paths.get(basePath, "column"))
   }
-
   override protected def afterEach(): Unit = {
     super.afterEach()
-    Files.deleteIfExists(Paths.get("/tmp/filedb/instructor"))
+    Files.deleteIfExists(Paths.get(basePath, "instructor"))
+    Files.deleteIfExists(Paths.get(basePath, "table"))
+    Files.deleteIfExists(Paths.get(basePath, "column"))
   }
 
   val instructorTableData = TableData(
@@ -33,24 +41,56 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
   )
 
   feature("system catalog") {
-    scenario("should add table to catalog") {
-      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
+    scenario("should store table metadata") {
+      val defaultCatalog = systemCatalogManager.readCatalog
 
-      systemCatalogManager.addTable(instructorTableData)
-
-      systemCatalogManager.readCatalog shouldBe SystemCatalog(
-        List(StoredTableData(instructorTableData, "/tmp/filedb/instructor"))
+      defaultCatalog shouldBe SystemCatalog(
+        List(
+          StoredTableData(SystemCatalogManager.tableTable, "/tmp/filedb/table"),
+          StoredTableData(SystemCatalogManager.columnTable, "/tmp/filedb/column")
+        )
       )
     }
+
+    scenario("should add table data to catalog") {
+      val defaultCatalog = systemCatalogManager.readCatalog
+
+      systemCatalogManager.createTable(instructorTableData)
+
+      systemCatalogManager.readCatalog shouldBe SystemCatalog(
+        List(
+          StoredTableData(instructorTableData, "/tmp/filedb/instructor")
+        ) ++ defaultCatalog.tables
+      )
+    }
+
+    scenario("should store catalog data") {
+      systemCatalogManager.createTable(instructorTableData)
+
+      fileManager.readRecords("table") shouldBe List(
+        Record(List(Value(Column("name", Varchar(32)), "instructor"), Value(Column("filePath", Varchar(100)), "/tmp/filedb/instructor")))
+      )
+      fileManager.readRecords("column") shouldBe List(
+        Record(List(
+          Value(Column("tableId", Varchar(32)), "instructor"),
+          Value(Column("name", Varchar(32)), "ID"),
+          Value(Column("type", Varchar(32)), "Varchar(5)"))
+        ),
+        Record(List(
+          Value(Column("tableId", Varchar(32)), "instructor"),
+          Value(Column("name", Varchar(32)), "name"),
+          Value(Column("type", Varchar(32)), "Varchar(20)"))
+        )
+      )
+    }
+
   }
 
   feature("file manager") {
     scenario("should be able to insert some record and retrieve it") {
-      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
-      val fileManager = new FileManager(systemCatalogManager)
       val record = instructorRecord("123", "abc")
       val records = List(record)
-      systemCatalogManager.addTable(instructorTableData)
+      systemCatalogManager.createTable(instructorTableData)
 
       fileManager.insertRecords(instructorTableData.name, records)
 
@@ -59,12 +99,10 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to insert 2 records and retrieve them") {
-      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
-      val fileManager = new FileManager(systemCatalogManager)
       val record = instructorRecord("123", "abc")
       val record2 = instructorRecord("234", "bcd")
       val records = List(record, record2)
-      systemCatalogManager.addTable(instructorTableData)
+      systemCatalogManager.createTable(instructorTableData)
 
       fileManager.insertRecords(instructorTableData.name, records)
 
@@ -73,13 +111,11 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to delete record") {
-      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
-      val fileManager = new FileManager(systemCatalogManager)
       val record = instructorRecord("123", "abc")
       val record2 = instructorRecord("234", "bcd")
       val record3 = instructorRecord("345", "cde")
       val records = List(record, record2, record3)
-      systemCatalogManager.addTable(instructorTableData)
+      systemCatalogManager.createTable(instructorTableData)
 
       fileManager.insertRecords(instructorTableData.name, records)
 
@@ -93,14 +129,12 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to store more than one page data (page is 4k)") {
-      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
-      val fileManager = new FileManager(systemCatalogManager)
       val record = largeInstructorRecord("123", "abc")
       val record2 = largeInstructorRecord("234", "bcd")
       val record3 = largeInstructorRecord("345", "cde")
 
       val records = List(record, record2, record3)
-      systemCatalogManager.addTable(largeInstructorTableData)
+      systemCatalogManager.createTable(largeInstructorTableData)
 
       fileManager.insertRecords(largeInstructorTableData.name, records)
 
@@ -109,14 +143,12 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to store more than one page data (page is 4k) when data inserted in separate batches") {
-      val systemCatalogManager = new SystemCatalogManager("/tmp/filedb")
-      val fileManager = new FileManager(systemCatalogManager)
       val record = largeInstructorRecord("123", "abc")
       val record2 = largeInstructorRecord("234", "bcd")
       val record3 = largeInstructorRecord("345", "cde")
 
       val records = List(record, record2, record3)
-      systemCatalogManager.addTable(largeInstructorTableData)
+      systemCatalogManager.createTable(largeInstructorTableData)
 
       fileManager.insertRecords(largeInstructorTableData.name, List(record, record2))
       fileManager.insertRecords(largeInstructorTableData.name, List(record3))

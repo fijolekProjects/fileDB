@@ -2,13 +2,13 @@ package pl.fijolek.filedb.storage
 
 import java.io.{File, RandomAccessFile}
 import java.math.BigInteger
+import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util
 
 import pl.fijolek.filedb.storage.ColumnTypes.{ColumnType, Varchar}
-import pl.fijolek.filedb.storage.DbConstants.bufferSize
+import pl.fijolek.filedb.storage.DbConstants.pageSize
 
-import scala.collection.immutable.TreeMap
 import scala.collection.mutable.ArrayBuffer
 
 // - record has to be smaller than buffer
@@ -39,38 +39,54 @@ class FileManager(systemCatalogManager: SystemCatalogManager){
 class RecordsIO {
 
   def readRecords(tableData: TableData, filePath: String): List[Record] = {
-    val file = new RandomAccessFile(filePath, "rw")
     val records = new ArrayBuffer[Record]()
-    FileUtils.traverse(file, bufferSize) { (buffer, bytesRead) =>
-      val recordsRead = tableData.readRecords(buffer, bytesRead)
+    FileUtils.traverse(filePath) { page =>
+      val recordsRead = tableData.readRecords(page)
       records ++= recordsRead
     }
     records.toList
   }
 
   def insertRecords(data: TableData, filePath: String, records: List[Record]): Unit = {
-    val file = new RandomAccessFile(filePath, "rw") //it creates file when it does not exists
-    val fileSize = file.length()
-    val bytesToWrite = data.prepareWrite(records, fileSize, bufferSize)
-    FileUtils.append(file, bytesToWrite)
+    val recordsToWriteSize = records.length * data.recordSize
+    val lastPage = Page.lastPage(filePath).getOrElse(Page.newPage(data, filePath, 0))
+    val pagesToWrite = if (lastPage.spareBytesAtTheEnd > recordsToWriteSize) {
+      List(lastPage.add(records.map(_.toBytes)))
+    } else {
+      val recordsThatFitsInLastPageCount = lastPage.spareBytesAtTheEnd / data.recordSize
+      val recordsToWriteInOtherPagesCount = records.length - recordsThatFitsInLastPageCount
+      val recordsInSinglePageCount = (DbConstants.pageSize - DbConstants.pageHeaderSize) / data.recordSize
+      val newPagesCount = Math.ceil(recordsToWriteInOtherPagesCount.toDouble / recordsInSinglePageCount.toDouble).toInt
+      val lastPageFull = lastPage.add(records.take(recordsThatFitsInLastPageCount).map(_.toBytes))
+      val newPages = (0 until newPagesCount).toList.map { i =>
+        val pageOffset = lastPage.offset + (i + 1) * DbConstants.pageSize
+        val recordsOffset = i * recordsInSinglePageCount + recordsThatFitsInLastPageCount
+        val newPageRecords = records.slice(recordsOffset, recordsOffset + recordsInSinglePageCount)
+        val newPageRecordsBytes = newPageRecords.map(_.toBytes)
+        val newPage = Page.newPage(data, filePath, pageOffset)
+        newPage.add(newPageRecordsBytes)
+      }
+      lastPageFull :: newPages
+    }
+
+    pagesToWrite.foreach { page =>
+      page.write()
+    }
     ()
   }
 
   def delete(data: TableData, filePath: String, record: Record): Unit = {
-    val file = new RandomAccessFile(filePath, "rw")
-    var currentFileOffset = 0
-    FileUtils.traverse(file, bufferSize) { (buffer, bytesRead) =>
-      val bufferWithDeletedRecord = data.prepareDelete(record, buffer, bytesRead)
-      file.seek(currentFileOffset)
-      file.write(bufferWithDeletedRecord)
-      currentFileOffset += bytesRead
+    FileUtils.traverse(filePath) { page =>
+      val newPage = data.prepareDelete(record, page)
+      newPage.write()
     }
   }
 
 }
 
 object DbConstants {
-  val bufferSize = 4096
+  val pageSize = 4096
+  val pageHeaderSize = 4
 }
 
 object SystemCatalogManager {
@@ -189,42 +205,18 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
     columnsDefinition.find(_.name == columnName).get
   }
 
-  def readRecords(buffer: Array[Byte], bytesRead: Int): List[Record] = {
-    val recordsInBuffer = bytesRead / recordSize
+  def readRecords(page: Page): List[Record] = {
+    val recordsInBuffer = page.recordBytes.length / recordSize
     (0 until recordsInBuffer).flatMap { index =>
-      val record = readRecord(buffer, index)
+      val record = readRecord(page.recordBytes, index)
       record
     }.toList
   }
 
-  private def readRecord(buffer: Array[Byte], recordIndex: Int): Option[Record] = {
-    val recordBytes = util.Arrays.copyOfRange(buffer, recordIndex * recordSize, recordIndex * recordSize + recordSize)
-    Record.fromBytes(recordBytes, columnsDefinition)
-  }
-
-  def prepareWrite(records: List[Record], fileSize: Long, bufferSize: Int): List[Array[Byte]] = {
-    val toWrite = records.zipWithIndex.map { case (record, index) =>
-      val offsetStart = fileSize + recordSize * index
-      val offsetAfterWrite = offsetStart + recordSize
-      val lastPageNumber = offsetStart / bufferSize
-      if (offsetAfterWrite / bufferSize == lastPageNumber) {
-        (lastPageNumber, record.toBytes)
-      } else {
-        val offsetEndOfPage = (lastPageNumber + 1) * bufferSize
-        val freeSpaceSize = (offsetEndOfPage - offsetStart).toInt
-        val freeSpace = new Array[Byte](freeSpaceSize)
-        (lastPageNumber + 1, freeSpace ++ record.toBytes)
-      }
-    }
-    val toWriteMap = toWrite.groupBy(_._1).mapValues(_.flatMap(_._2).toArray)
-    val sortedMap = TreeMap(toWriteMap.toSeq: _*)
-    sortedMap.values.toList
-  }
-
-  def prepareDelete(record: Record, buffer: Array[Byte], bytesRead: Int): Array[Byte] = {
-    val recordsInBuffer = bytesRead / recordSize
+  def prepareDelete(record: Record, page: Page): Page = {
+    val recordsInBuffer = page.recordBytes.length / recordSize
     val deleteBufferOffsets = (0 until recordsInBuffer).flatMap { index =>
-      val recordRead = readRecord(buffer, index)
+      val recordRead = readRecord(page.recordBytes, index)
       recordRead.flatMap { rec =>
         if (rec == record) {
           val currentOffset = index * recordSize
@@ -233,13 +225,13 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
           None
         }
       }
-    }
-    val bufferWithDeletedRecord = deleteBufferOffsets.foldLeft(util.Arrays.copyOf(buffer, buffer.length)) { case (bufferWithDeleted, offset) =>
-      val emptyBytes = new Array[Byte](recordSize)
-      System.arraycopy(emptyBytes, 0, bufferWithDeleted, offset, emptyBytes.length)
-      bufferWithDeleted
-    }
-    bufferWithDeletedRecord
+    }.toList
+    page.remove(deleteBufferOffsets, recordSize)
+  }
+
+  private def readRecord(buffer: Array[Byte], recordIndex: Int): Option[Record] = {
+    val recordBytes = util.Arrays.copyOfRange(buffer, recordIndex * recordSize, recordIndex * recordSize + recordSize)
+    Record.fromBytes(recordBytes, columnsDefinition)
   }
 
 }
@@ -299,10 +291,10 @@ object Record {
           val stringBytes = value.value.asInstanceOf[String].getBytes
           util.Arrays.copyOf(stringBytes, sizeInBytes)
         case numType: ColumnTypes.Numeric =>
-//          val bytes = value.value.asInstanceOf[BigDecimal].setScale(numType.scale).underlying().unscaledValue().toByteArray
-//          watch out for little/big endian - BigInteger assumes big-endian
-//          System.arraycopy(bytes, 0, bytesToWrite, sizeInBytes - bytes.length, bytes.length)
-//          bytesToWrite
+          //          val bytes = value.value.asInstanceOf[BigDecimal].setScale(numType.scale).underlying().unscaledValue().toByteArray
+          //          watch out for little/big endian - BigInteger assumes big-endian
+          //          System.arraycopy(bytes, 0, bytesToWrite, sizeInBytes - bytes.length, bytes.length)
+          //          bytesToWrite
           ???
       }
     }
@@ -315,28 +307,34 @@ case class Value(column: Column, value: Any)
 
 
 object FileUtils {
-  def traverse(file: RandomAccessFile, bufferSize: Int)(process: (Array[Byte], Int) => Unit): Unit = {
-    val buffer = new Array[Byte](bufferSize)
-    var bytesRead = -1
-    try {
+
+  def traverse(filePath: String)(process: Page => Unit): Unit = {
+    withFileOpen(filePath) { file =>
+      val buffer = new Array[Byte](DbConstants.pageSize)
+      var bytesRead = -1
+      var pageCount = 0
       while ( {
         bytesRead = file.read(buffer)
         bytesRead != -1
       }) {
-        process(buffer, bytesRead)
+        val page = Page.apply(buffer, filePath, pageCount * DbConstants.pageSize)
+        process(page)
+        pageCount += 1
       }
-    } finally {
-      file.close()
     }
   }
 
-  def append(file: RandomAccessFile, pages: List[Array[Byte]]): Unit = {
-    val fileSize = file.length()
+  def write(filePath: String, offset: Long, bytes: Array[Byte]): Unit = {
+    withFileOpen(filePath) { file =>
+      file.seek(offset)
+      file.write(bytes)
+    }
+  }
+
+  def withFileOpen[T](filePath: String)(process: (RandomAccessFile) => T): T = {
+    val file = new RandomAccessFile(filePath, "rw")
     try {
-      file.seek(fileSize)
-      pages.foreach { page =>
-        file.write(page)
-      }
+      process(file)
     } finally {
       file.close()
     }
@@ -346,5 +344,103 @@ object FileUtils {
     file.getParentFile.mkdirs()
     file.createNewFile()
     ()
+  }
+}
+
+case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte], filePath: String, offset: Long) {
+
+  def add(records: List[Array[Byte]]): Page = {
+    records.foldLeft(this) { case (newPage, record) =>
+      newPage.add(record)
+    }
+  }
+
+  def add(record: Array[Byte]): Page = {
+    this.copy(headerBytes = this.header.addRecord(record.length).toBytes, recordBytes = recordBytes ++ record)
+  }
+
+  def remove(recordIndices: List[Int], recordSize: Int): Page = {
+    recordIndices.foldLeft(this) { case (newPage, recordIndex) =>
+      newPage.remove(recordIndex, recordSize)
+    }
+  }
+
+  def remove(recordStartOffset: Int, recordSize: Int): Page = {
+    val rangeToRemove = Range(recordStartOffset, recordStartOffset + recordSize)
+    val newRecordBytes = recordBytes.zipWithIndex.map { case (byt, index) =>
+      if (rangeToRemove.contains(index)) 0: Byte
+      else byt
+    }
+    this.copy(recordBytes = newRecordBytes)
+  }
+
+  def write(): Unit = {
+    val headerBytes = header.toBytes
+    val toWrite = headerBytes ++ recordBytes
+    FileUtils.write(filePath, offset, toWrite)
+  }
+
+  def spareBytesAtTheEnd: Int = {
+    header.spareBytesAtTheEnd
+  }
+
+  private def header: PageHeader = {
+    PageHeader.fromBytes(headerBytes)
+  }
+
+}
+
+object Page {
+
+  def apply(bytes: Array[Byte], filePath: String, offset: Long): Page = {
+    val headerBytes = util.Arrays.copyOfRange(bytes, 0, DbConstants.pageHeaderSize)
+    val header = PageHeader.fromBytes(headerBytes)
+    val recordBytes = util.Arrays.copyOfRange(bytes, DbConstants.pageHeaderSize, bytes.length - header.spareBytesAtTheEnd)
+    new Page(headerBytes = headerBytes, recordBytes = recordBytes, filePath, offset)
+  }
+
+  def newPage(tableData: TableData, filePath: String, offset: Long): Page = {
+    val headerBytes = PageHeader.newHeader.toBytes
+    val recordBytes = new Array[Byte](0)
+    new Page(headerBytes = headerBytes, recordBytes = recordBytes, filePath, offset)
+  }
+
+  def lastPage(filePath: String): Option[Page] = {
+    FileUtils.withFileOpen(filePath) { file =>
+      val fileSize = file.length()
+      if (fileSize == 0) {
+        None
+      } else {
+        val pageOffset = (fileSize / pageSize) * pageSize
+        file.seek(pageOffset)
+        val pageBytes = new Array[Byte](pageSize)
+        val bytesRead = file.read(pageBytes)
+        Some(Page(pageBytes.take(bytesRead), filePath, pageOffset))
+      }
+    }
+
+  }
+
+}
+
+case class PageHeader(spareBytesAtTheEnd: Int) {
+  def toBytes: Array[Byte] = {
+    ByteBuffer.allocate(4).putInt(spareBytesAtTheEnd).array()
+  }
+
+  def addRecord(recordLength: Int): PageHeader = {
+    this.copy(spareBytesAtTheEnd = spareBytesAtTheEnd - recordLength)
+  }
+
+}
+
+object PageHeader {
+  def fromBytes(bytes: Array[Byte]): PageHeader = {
+    val spareBytes = ByteBuffer.wrap(bytes).getInt
+    PageHeader(spareBytes)
+  }
+
+  def newHeader = {
+    new PageHeader(DbConstants.pageSize - DbConstants.pageHeaderSize)
   }
 }

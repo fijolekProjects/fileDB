@@ -80,7 +80,7 @@ object Page {
 
 case class PageHeader(spareBytesAtTheEnd: Int) {
   def toBytes: Array[Byte] = {
-    ByteBuffer.allocate(4).putInt(spareBytesAtTheEnd).array()
+    ByteBuffer.allocate(java.lang.Integer.BYTES).putInt(spareBytesAtTheEnd).array()
   }
 
   def addRecord(recordLength: Int): PageHeader = {

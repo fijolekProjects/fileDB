@@ -2,7 +2,7 @@ package pl.fijolek.filedb.storage
 
 import java.io.File
 
-import pl.fijolek.filedb.storage.ColumnTypes.Varchar
+import pl.fijolek.filedb.storage.ColumnTypes.ColumnType
 
 object SystemCatalogManager {
 
@@ -47,10 +47,9 @@ object SystemCatalogManager {
   def toColumn(columnRecord: Record): (String, Column) = {
     val tableId = columnRecord.values(0).value.toString
     val columnName = columnRecord.values(1).value.toString
-    val columnType = columnRecord.values(2).value.toString
-    //TODO varchar only for now
-    val varcharLength = "Varchar\\((.*)\\)".r.findAllMatchIn(columnType).toList(0).group(1).toInt
-    val column = Column(columnName, Varchar(varcharLength))
+    val columnTypeString = columnRecord.values(2).value.toString
+    val columnType = ColumnType.fromString(columnTypeString)
+    val column = Column(columnName, columnType)
     (tableId, column)
   }
 

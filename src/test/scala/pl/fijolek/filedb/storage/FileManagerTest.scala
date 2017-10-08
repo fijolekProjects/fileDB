@@ -27,7 +27,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
   val instructorTableData = TableData(
     name = "instructor",
     columnsDefinition = List(
-      Column("ID", ColumnTypes.Varchar(5)),
+      Column("ID", ColumnTypes.BigInt),
       Column("name", ColumnTypes.Varchar(20))
     )
   )
@@ -35,7 +35,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
   val largeInstructorTableData = TableData(
     name = "instructor",
     columnsDefinition = List(
-      Column("ID", ColumnTypes.Varchar(5)),
+      Column("ID", ColumnTypes.BigInt),
       Column("name", ColumnTypes.Varchar(2000))
     )
   )
@@ -74,7 +74,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
         Record(List(
           Value(Column("tableId", Varchar(32)), "instructor"),
           Value(Column("name", Varchar(32)), "ID"),
-          Value(Column("type", Varchar(32)), "Varchar(5)"))
+          Value(Column("type", Varchar(32)), "BigInt"))
         ),
         Record(List(
           Value(Column("tableId", Varchar(32)), "instructor"),
@@ -88,7 +88,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
   feature("file manager") {
     scenario("should be able to insert some record and retrieve it") {
-      val record = instructorRecord("123", "abc")
+      val record = instructorRecord(123, "abc")
       val records = List(record)
       systemCatalogManager.createTable(instructorTableData)
 
@@ -99,8 +99,8 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to insert 2 records and retrieve them") {
-      val record = instructorRecord("123", "abc")
-      val record2 = instructorRecord("234", "bcd")
+      val record = instructorRecord(123, "abc")
+      val record2 = instructorRecord(234, "bcd")
       val records = List(record, record2)
       systemCatalogManager.createTable(instructorTableData)
 
@@ -111,9 +111,9 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to delete record") {
-      val record = instructorRecord("123", "abc")
-      val record2 = instructorRecord("234", "bcd")
-      val record3 = instructorRecord("345", "cde")
+      val record = instructorRecord(123, "abc")
+      val record2 = instructorRecord(234, "bcd")
+      val record3 = instructorRecord(345, "cde")
       val records = List(record, record2, record3)
       systemCatalogManager.createTable(instructorTableData)
 
@@ -129,9 +129,9 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to store more than one page data (page is 4k)") {
-      val record = largeInstructorRecord("123", "abc")
-      val record2 = largeInstructorRecord("234", "bcd")
-      val record3 = largeInstructorRecord("345", "cde")
+      val record = largeInstructorRecord(123, "abc")
+      val record2 = largeInstructorRecord(234, "bcd")
+      val record3 = largeInstructorRecord(345, "cde")
 
       val records = List(record, record2, record3)
       systemCatalogManager.createTable(largeInstructorTableData)
@@ -143,9 +143,9 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     }
 
     scenario("should be able to store more than one page data (page is 4k) when data inserted in separate batches") {
-      val record = largeInstructorRecord("123", "abc")
-      val record2 = largeInstructorRecord("234", "bcd")
-      val record3 = largeInstructorRecord("345", "cde")
+      val record = largeInstructorRecord(123, "abc")
+      val record2 = largeInstructorRecord(234, "bcd")
+      val record3 = largeInstructorRecord(345, "cde")
 
       val records = List(record, record2, record3)
       systemCatalogManager.createTable(largeInstructorTableData)
@@ -159,16 +159,16 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
   }
 
-  def instructorRecord(id: String, name: String): Record = {
+  def instructorRecord(id: Long, name: String): Record = {
     Record(List(
-      Value(Column("ID", ColumnTypes.Varchar(5)), id),
+      Value(Column("ID", ColumnTypes.BigInt), id),
       Value(Column("name", ColumnTypes.Varchar(20)), name)
     ))
   }
 
-  def largeInstructorRecord(id: String, name: String): Record = {
+  def largeInstructorRecord(id: Long, name: String): Record = {
     Record(List(
-      Value(Column("ID", ColumnTypes.Varchar(5)), id),
+      Value(Column("ID", ColumnTypes.BigInt), id),
       Value(Column("name", ColumnTypes.Varchar(2000)), name)
     ))
   }

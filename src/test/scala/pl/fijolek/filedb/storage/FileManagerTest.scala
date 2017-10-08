@@ -13,13 +13,17 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    Files.deleteIfExists(Paths.get(basePath, "instructor"))
-    Files.deleteIfExists(Paths.get(basePath, "table"))
-    Files.deleteIfExists(Paths.get(basePath, "column"))
+    cleanTables
+
   }
   override protected def afterEach(): Unit = {
     super.afterEach()
+    cleanTables
+  }
+
+  private def cleanTables = {
     Files.deleteIfExists(Paths.get(basePath, "instructor"))
+    Files.deleteIfExists(Paths.get(basePath, "file"))
     Files.deleteIfExists(Paths.get(basePath, "table"))
     Files.deleteIfExists(Paths.get(basePath, "column"))
   }
@@ -46,6 +50,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
       defaultCatalog shouldBe SystemCatalog(
         List(
+          StoredTableData(SystemCatalogManager.fileTable, "/tmp/filedb/file"),
           StoredTableData(SystemCatalogManager.tableTable, "/tmp/filedb/table"),
           StoredTableData(SystemCatalogManager.columnTable, "/tmp/filedb/column")
         )
@@ -68,7 +73,10 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
       systemCatalogManager.createTable(instructorTableData)
 
       fileManager.readRecords("table") shouldBe List(
-        Record(List(Value(Column("name", Varchar(32)), "instructor"), Value(Column("filePath", Varchar(100)), "/tmp/filedb/instructor")))
+        Record(List(Value(Column("name", Varchar(32)), "instructor"), Value(Column("fileId", ColumnTypes.BigInt), 0L)))
+      )
+      fileManager.readRecords("file") shouldBe List(
+        Record(List(Value(Column("id", ColumnTypes.BigInt), 0L), Value(Column("filePath", Varchar(100)), "/tmp/filedb/instructor")))
       )
       fileManager.readRecords("column") shouldBe List(
         Record(List(

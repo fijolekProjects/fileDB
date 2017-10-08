@@ -69,8 +69,8 @@ object Page {
         val pageOffset = (fileSize / DbConstants.pageSize) * DbConstants.pageSize
         file.seek(pageOffset)
         val pageBytes = new Array[Byte](DbConstants.pageSize)
-        val bytesRead = file.read(pageBytes)
-        Some(Page(pageBytes.take(bytesRead), filePath, pageOffset))
+        file.read(pageBytes)
+        Some(Page(pageBytes, filePath, pageOffset))
       }
     }
 

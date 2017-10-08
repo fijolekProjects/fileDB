@@ -9,6 +9,7 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
     columnsDefinition.map(_.typ.sizeInBytes).sum
   }
 
+  //fixme this method should be removed? there should be fileId -> filePath mapping used
   def path(basePath: String): File = {
     Paths.get(basePath, name).toFile
   }

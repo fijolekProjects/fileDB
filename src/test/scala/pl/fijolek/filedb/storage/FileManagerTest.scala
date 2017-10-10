@@ -14,7 +14,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     cleanTables
-
+    systemCatalogManager.init()
   }
   override protected def afterEach(): Unit = {
     super.afterEach()
@@ -44,6 +44,25 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
     )
   )
 
+  val internalFileRecords = List(
+    Record(List(Value(Column("id", ColumnTypes.BigInt), -1), Value(Column("filePath", Varchar(100)), "/tmp/filedb/file"))),
+    Record(List(Value(Column("id", ColumnTypes.BigInt), -2), Value(Column("filePath", Varchar(100)), "/tmp/filedb/table"))),
+    Record(List(Value(Column("id", ColumnTypes.BigInt), -3), Value(Column("filePath", Varchar(100)), "/tmp/filedb/column")))
+  )
+  val internalTableRecords = List(
+    Record(List(Value(Column("name", Varchar(32)), "file"), Value(Column("fileId", ColumnTypes.BigInt), -1))),
+    Record(List(Value(Column("name", Varchar(32)), "table"), Value(Column("fileId", ColumnTypes.BigInt), -2))),
+    Record(List(Value(Column("name", Varchar(32)), "column"), Value(Column("fileId", ColumnTypes.BigInt), -3)))
+  )
+  val internalColumnRecords = List(
+    Record(List(Value(Column("tableId", Varchar(32)), "file"), Value(Column("name", Varchar(32)), "id"), Value(Column("type", Varchar(32)), "BigInt"))),
+    Record(List(Value(Column("tableId", Varchar(32)), "file"), Value(Column("name", Varchar(32)), "filePath"), Value(Column("type", Varchar(32)), "Varchar(100)"))),
+    Record(List(Value(Column("tableId", Varchar(32)), "table"), Value(Column("name", Varchar(32)), "name"), Value(Column("type", Varchar(32)), "Varchar(32)"))),
+    Record(List(Value(Column("tableId", Varchar(32)), "table"), Value(Column("name", Varchar(32)), "fileId"), Value(Column("type", Varchar(32)), "BigInt"))),
+    Record(List(Value(Column("tableId", Varchar(32)), "column"), Value(Column("name", Varchar(32)), "tableId"), Value(Column("type", Varchar(32)), "Varchar(32)"))),
+    Record(List(Value(Column("tableId", Varchar(32)), "column"), Value(Column("name", Varchar(32)), "name"), Value(Column("type", Varchar(32)), "Varchar(32)"))),
+    Record(List(Value(Column("tableId", Varchar(32)), "column"), Value(Column("name", Varchar(32)), "type"), Value(Column("type", Varchar(32)), "Varchar(32)")))
+  )
   feature("system catalog") {
     scenario("should store table metadata") {
       val defaultCatalog = systemCatalogManager.readCatalog
@@ -55,6 +74,9 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
           StoredTableData(SystemCatalogManager.columnTable, "/tmp/filedb/column")
         )
       )
+      fileManager.readRecords("file") shouldBe internalFileRecords
+      fileManager.readRecords("table") shouldBe internalTableRecords
+      fileManager.readRecords("column") shouldBe internalColumnRecords
     }
 
     scenario("should add table data to catalog") {
@@ -63,22 +85,22 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
       systemCatalogManager.createTable(instructorTableData)
 
       systemCatalogManager.readCatalog shouldBe SystemCatalog(
-        List(
+        defaultCatalog.tables ++ List(
           StoredTableData(instructorTableData, "/tmp/filedb/instructor")
-        ) ++ defaultCatalog.tables
+        )
       )
     }
 
     scenario("should store catalog data") {
       systemCatalogManager.createTable(instructorTableData)
 
-      fileManager.readRecords("table") shouldBe List(
+      fileManager.readRecords("table") shouldBe internalTableRecords ++ List(
         Record(List(Value(Column("name", Varchar(32)), "instructor"), Value(Column("fileId", ColumnTypes.BigInt), 0L)))
       )
-      fileManager.readRecords("file") shouldBe List(
+      fileManager.readRecords("file") shouldBe internalFileRecords ++ List(
         Record(List(Value(Column("id", ColumnTypes.BigInt), 0L), Value(Column("filePath", Varchar(100)), "/tmp/filedb/instructor")))
       )
-      fileManager.readRecords("column") shouldBe List(
+      fileManager.readRecords("column") shouldBe internalColumnRecords ++ List(
         Record(List(
           Value(Column("tableId", Varchar(32)), "instructor"),
           Value(Column("name", Varchar(32)), "ID"),

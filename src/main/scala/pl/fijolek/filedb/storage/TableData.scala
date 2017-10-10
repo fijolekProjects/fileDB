@@ -1,17 +1,10 @@
 package pl.fijolek.filedb.storage
 
-import java.io.File
-import java.nio.file.Paths
 import java.util
 
 case class TableData(name: String, columnsDefinition: List[Column]) {
   val recordSize: Int = {
     columnsDefinition.map(_.typ.sizeInBytes).sum
-  }
-
-  //fixme this method should be removed? there should be fileId -> filePath mapping used
-  def path(basePath: String): File = {
-    Paths.get(basePath, name).toFile
   }
 
   def column(columnName: String): Column = {

@@ -1,6 +1,7 @@
 package pl.fijolek.filedb.storage
 
 import java.io.File
+import java.nio.file.Paths
 
 import pl.fijolek.filedb.storage.ColumnTypes.ColumnType
 
@@ -74,19 +75,28 @@ object SystemCatalogManager {
 class SystemCatalogManager(val basePath: String) {
   import SystemCatalogManager._
 
-  val recordsReader = new RecordsIO
+  val recordsIO = new RecordsIO
+
+  def init(): Unit = {
+    createTable(fileTable, -1)
+    createTable(tableTable, -2)
+    createTable(columnTable, -3)
+  }
 
   def createTable(tableData: TableData): Unit = {
-    //fixme internal tables in `file` table?
-    val tableFile = tableData.path(basePath)
-    FileUtils.touchFile(tableFile)
     val fileId = maxFileId + 1
+    createTable(tableData, fileId)
+  }
+
+  private def createTable(tableData: TableData, fileId: Long): Unit = {
+    val tableFile = filePath(tableData)
+    FileUtils.touchFile(tableFile)
     val fileRecord = toFileRecord(fileId, tableFile)
     val tableRecord = toTableRecord(tableData, fileId)
     val columnsRecords = tableData.columnsDefinition.map { columnDef => toColumnRecord(columnDef, tableData.name) }
-    recordsReader.insertRecords(fileTable, fileTable.path(basePath).getAbsolutePath, List(fileRecord))
-    recordsReader.insertRecords(tableTable, tableTable.path(basePath).getAbsolutePath, List(tableRecord))
-    recordsReader.insertRecords(columnTable, columnTable.path(basePath).getAbsolutePath, columnsRecords)
+    recordsIO.insertRecords(fileTable, filePath(fileTable).getAbsolutePath, List(fileRecord))
+    recordsIO.insertRecords(tableTable, filePath(tableTable).getAbsolutePath, List(tableRecord))
+    recordsIO.insertRecords(columnTable, filePath(columnTable).getAbsolutePath, columnsRecords)
     ()
   }
 
@@ -97,8 +107,8 @@ class SystemCatalogManager(val basePath: String) {
   }
 
   def readCatalog: SystemCatalog = {
-    val tables = read(tableTable)
-    val columns = read(columnTable)
+    val tables = readInternalTable(tableTable)
+    val columns = readInternalTable(columnTable)
     val tablesData = tables.map { tableRecord =>
       val (tableName, filePath) = toTable(tableRecord, readFileIdToPath)
       tableName -> filePath
@@ -110,17 +120,12 @@ class SystemCatalogManager(val basePath: String) {
     }
     val tableInfo = tablesData.map { case (tableName, filePath) =>
       StoredTableData(TableData(tableName, columnsData(tableName)), filePath)
-    }.toList ++ List(
-      StoredTableData(fileTable, fileTable.path(basePath).getAbsolutePath),
-      StoredTableData(tableTable, tableTable.path(basePath).getAbsolutePath),
-      StoredTableData(columnTable, columnTable.path(basePath).getAbsolutePath)
-    )
-    //fixme add internal tables to `table` table?
+    }.toList
     SystemCatalog(tableInfo)
   }
 
   private def readFileIdToPath: Map[Long, String] = {
-    val files = read(fileTable)
+    val files = readInternalTable(fileTable)
     val fileIdToPath = files.map { record =>
       val id = record.values.find(_.column.name == "id").get.value.asInstanceOf[Long]
       val filePath = record.values.find(_.column.name == "filePath").get.value.asInstanceOf[String]
@@ -129,12 +134,16 @@ class SystemCatalogManager(val basePath: String) {
     fileIdToPath
   }
 
-  private def read(tableData: TableData): List[Record] = {
-    val file = tableData.path(basePath)
+  private def readInternalTable(tableData: TableData): List[Record] = {
+    val file = filePath(tableData)
     if (!file.exists()) {
       FileUtils.touchFile(file)
     }
-    recordsReader.readRecords(tableData, file.getAbsolutePath)
+    recordsIO.readRecords(tableData, file.getAbsolutePath)
+  }
+
+  private def filePath(tableData: TableData): File = {
+    Paths.get(basePath, tableData.name).toFile
   }
 
 }

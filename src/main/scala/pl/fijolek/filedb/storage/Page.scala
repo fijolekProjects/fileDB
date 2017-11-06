@@ -2,7 +2,7 @@ package pl.fijolek.filedb.storage
 
 import java.nio.ByteBuffer
 
-case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte], filePath: String, offset: Long) {
+case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte]) {
 
   def add(records: List[Array[Byte]]): Page = {
     records.foldLeft(this) { case (newPage, record) =>
@@ -32,12 +32,14 @@ case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte], filePath: St
   def write(): Unit = {
     val headerBytes = header.toBytes
     val toWrite = headerBytes ++ recordBytes
-    FileUtils.write(filePath, offset, toWrite)
+    FileUtils.write(header.filePath, header.offset, toWrite)
   }
 
   def spareBytesAtTheEnd: Int = {
     header.spareBytesAtTheEnd
   }
+
+  def offset = header.offset
 
   private def header: PageHeader = {
     PageHeader.fromBytes(headerBytes)
@@ -47,17 +49,17 @@ case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte], filePath: St
 
 object Page {
 
-  def apply(bytes: Array[Byte], filePath: String, offset: Long): Page = {
+  def apply(bytes: Array[Byte]): Page = {
     val headerBytes = java.util.Arrays.copyOfRange(bytes, 0, DbConstants.pageHeaderSize)
     val header = PageHeader.fromBytes(headerBytes)
     val recordBytes = java.util.Arrays.copyOfRange(bytes, DbConstants.pageHeaderSize, bytes.length - header.spareBytesAtTheEnd)
-    new Page(headerBytes = headerBytes, recordBytes = recordBytes, filePath, offset)
+    new Page(headerBytes = headerBytes, recordBytes = recordBytes)
   }
 
   def newPage(tableData: TableData, filePath: String, offset: Long): Page = {
-    val headerBytes = PageHeader.newHeader.toBytes
+    val headerBytes = PageHeader.newHeader(filePath, offset).toBytes
     val recordBytes = new Array[Byte](0)
-    new Page(headerBytes = headerBytes, recordBytes = recordBytes, filePath, offset)
+    new Page(headerBytes = headerBytes, recordBytes = recordBytes)
   }
 
   def lastPage(filePath: String): Option[Page] = {
@@ -70,7 +72,7 @@ object Page {
         file.seek(pageOffset)
         val pageBytes = new Array[Byte](DbConstants.pageSize)
         file.read(pageBytes)
-        Some(Page(pageBytes, filePath, pageOffset))
+        Some(Page(pageBytes))
       }
     }
 
@@ -78,9 +80,30 @@ object Page {
 
 }
 
-case class PageHeader(spareBytesAtTheEnd: Int) {
+case class PageId(filePath: String, offset: Long) {
+  def toBytes = {
+    val filePathBuffer = ByteBuffer.allocate(DbConstants.filePathSize)
+    val buffer = ByteBuffer.allocate(DbConstants.pageIdSize - DbConstants.filePathSize)
+    filePathBuffer.put(filePath.getBytes).array() ++ buffer.putLong(offset).array()
+  }
+}
+
+object PageId {
+  def fromBytes(bytes: Array[Byte]): PageId = {
+    val (filePathBytes, offsetBytes) = (bytes.take(DbConstants.filePathSize), bytes.drop(DbConstants.filePathSize))
+    PageId(filePath = new String(filePathBytes.takeWhile(_ != 0)), offset = ByteBuffer.wrap(offsetBytes).getLong)
+  }
+}
+
+case class PageHeader(pageId: PageId, spareBytesAtTheEnd: Int) {
+  def offset = pageId.offset
+  def filePath = pageId.filePath
+
   def toBytes: Array[Byte] = {
-    ByteBuffer.allocate(java.lang.Integer.BYTES).putInt(spareBytesAtTheEnd).array()
+    val buffer = ByteBuffer.allocate(DbConstants.pageHeaderSize)
+      .put(pageId.toBytes)
+      .putInt(spareBytesAtTheEnd)
+    buffer.array()
   }
 
   def addRecord(recordLength: Int): PageHeader = {
@@ -91,11 +114,12 @@ case class PageHeader(spareBytesAtTheEnd: Int) {
 
 object PageHeader {
   def fromBytes(bytes: Array[Byte]): PageHeader = {
-    val spareBytes = ByteBuffer.wrap(bytes).getInt
-    PageHeader(spareBytes)
+    val (pageIdBytes, restBytes) = (bytes.take(DbConstants.pageIdSize), bytes.drop(DbConstants.pageIdSize))
+    PageHeader(pageId = PageId.fromBytes(pageIdBytes), spareBytesAtTheEnd = ByteBuffer.wrap(restBytes).getInt)
   }
 
-  def newHeader = {
-    new PageHeader(DbConstants.pageSize - DbConstants.pageHeaderSize)
+  def newHeader(filePath: String, offset: Long): PageHeader = {
+    val pageId = PageId(filePath = filePath, offset = offset)
+    new PageHeader(pageId = pageId, spareBytesAtTheEnd = DbConstants.pageSize - DbConstants.pageHeaderSize)
   }
 }

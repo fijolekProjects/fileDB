@@ -13,7 +13,7 @@ object FileUtils {
         bytesRead = file.read(buffer)
         bytesRead != -1
       }) {
-        val page = Page.apply(buffer, filePath, pageCount * DbConstants.pageSize)
+        val page = Page.apply(buffer)
         process(page)
         pageCount += 1
       }

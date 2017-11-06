@@ -11,7 +11,7 @@ object SystemCatalogManager {
     name = "file",
     columnsDefinition = List(
       Column("id", ColumnTypes.BigInt),
-      Column("filePath", ColumnTypes.Varchar(100))
+      Column("filePath", ColumnTypes.Varchar(DbConstants.filePathSize))
     )
   )
 

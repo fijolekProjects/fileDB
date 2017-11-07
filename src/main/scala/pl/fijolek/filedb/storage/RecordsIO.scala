@@ -2,20 +2,21 @@ package pl.fijolek.filedb.storage
 
 import scala.collection.mutable.ArrayBuffer
 
-class RecordsIO {
+class RecordsIO(basePath: String) {
+  private val fileIdMapper = new FileIdMapper(basePath)
 
   def readRecords(tableData: TableData, filePath: String): List[Record] = {
-    val records = new ArrayBuffer[Record]()
-    FileUtils.traverse(filePath) { page =>
-      val recordsRead = tableData.readRecords(page)
-      records ++= recordsRead
-    }
-    records.toList
+    TableData.readRecords(tableData, filePath)
   }
 
   def insertRecords(data: TableData, filePath: String, records: List[Record]): Unit = {
+    val fileId = fileIdMapper.fileId(filePath)
+    insertRecords(data, filePath, records, fileId)
+  }
+
+  def insertRecords(data: TableData, filePath: String, records: List[Record], fileId: Long): Unit = {
     val recordsToWriteSize = records.length * data.recordSize
-    val lastPage = Page.lastPage(filePath).getOrElse(Page.newPage(data, filePath, 0))
+    val lastPage = Page.lastPage(filePath).getOrElse(Page.newPage(data, fileId, 0))
     val pagesToWrite = if (lastPage.spareBytesAtTheEnd > recordsToWriteSize) {
       List(lastPage.add(records.map(_.toBytes)))
     } else {
@@ -29,14 +30,14 @@ class RecordsIO {
         val recordsOffset = i * recordsInSinglePageCount + recordsThatFitsInLastPageCount
         val newPageRecords = records.slice(recordsOffset, recordsOffset + recordsInSinglePageCount)
         val newPageRecordsBytes = newPageRecords.map(_.toBytes)
-        val newPage = Page.newPage(data, filePath, pageOffset)
+        val newPage = Page.newPage(data, fileId, pageOffset)
         newPage.add(newPageRecordsBytes)
       }
       lastPageFull :: newPages
     }
 
     pagesToWrite.foreach { page =>
-      page.write()
+      writePage(page)
     }
     ()
   }
@@ -44,8 +45,27 @@ class RecordsIO {
   def delete(data: TableData, filePath: String, record: Record): Unit = {
     FileUtils.traverse(filePath) { page =>
       val newPage = data.prepareDelete(record, page)
-      newPage.write()
+      writePage(newPage)
     }
+  }
+
+  private def writePage(page: Page): Unit = {
+    val filePath = fileIdMapper.path(page.pageId.fileId)
+    val toWrite = page.bytes
+    FileUtils.write(filePath, page.pageId.offset, toWrite)
+  }
+
+
+}
+
+class TableReader {
+  def readRecords(tableData: TableData, filePath: String): List[Record] = {
+    val records = new ArrayBuffer[Record]()
+    FileUtils.traverse(filePath) { page =>
+      val recordsRead = tableData.readRecords(page)
+      records ++= recordsRead
+    }
+    records.toList
   }
 
 }

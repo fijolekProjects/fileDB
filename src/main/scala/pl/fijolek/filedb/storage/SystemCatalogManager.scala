@@ -7,6 +7,10 @@ import pl.fijolek.filedb.storage.ColumnTypes.ColumnType
 
 object SystemCatalogManager {
 
+  val fileTableFileId = -1L
+  val tableTableFileId = -2L
+  val columnTableFileId = -3L
+
   val fileTable = TableData(
     name = "file",
     columnsDefinition = List(
@@ -30,6 +34,12 @@ object SystemCatalogManager {
       Column("name", ColumnTypes.Varchar(32)),
       Column("type", ColumnTypes.Varchar(32))
     )
+  )
+
+  val internalFiles: Map[Long, TableData] = Map(
+    fileTableFileId -> fileTable,
+    tableTableFileId -> tableTable,
+    columnTableFileId -> columnTable
   )
 
   def toColumnRecord(columnDef: Column, tableId: String): Record = {
@@ -75,12 +85,13 @@ object SystemCatalogManager {
 class SystemCatalogManager(val basePath: String) {
   import SystemCatalogManager._
 
-  val recordsIO = new RecordsIO
+  private val recordsIO = new RecordsIO(basePath)
+  private val fileIdMapper = new FileIdMapper(basePath)
 
   def init(): Unit = {
-    createTable(fileTable, -1)
-    createTable(tableTable, -2)
-    createTable(columnTable, -3)
+    createTable(fileTable, fileTableFileId)
+    createTable(tableTable, tableTableFileId)
+    createTable(columnTable, columnTableFileId)
   }
 
   def createTable(tableData: TableData): Unit = {
@@ -94,14 +105,14 @@ class SystemCatalogManager(val basePath: String) {
     val fileRecord = toFileRecord(fileId, tableFile)
     val tableRecord = toTableRecord(tableData, fileId)
     val columnsRecords = tableData.columnsDefinition.map { columnDef => toColumnRecord(columnDef, tableData.name) }
-    recordsIO.insertRecords(fileTable, filePath(fileTable).getAbsolutePath, List(fileRecord))
-    recordsIO.insertRecords(tableTable, filePath(tableTable).getAbsolutePath, List(tableRecord))
-    recordsIO.insertRecords(columnTable, filePath(columnTable).getAbsolutePath, columnsRecords)
+    recordsIO.insertRecords(fileTable, filePath(fileTable).getAbsolutePath, List(fileRecord), fileTableFileId)
+    recordsIO.insertRecords(tableTable, filePath(tableTable).getAbsolutePath, List(tableRecord), tableTableFileId)
+    recordsIO.insertRecords(columnTable, filePath(columnTable).getAbsolutePath, columnsRecords, columnTableFileId)
     ()
   }
 
   private def maxFileId: Long = {
-    val fileIdToPath = readFileIdToPath
+    val fileIdToPath = fileIdMapper.fileIdToPath
     val ids = fileIdToPath.keys.toList
     if (ids.isEmpty) -1 else ids.max
   }
@@ -110,7 +121,7 @@ class SystemCatalogManager(val basePath: String) {
     val tables = readInternalTable(tableTable)
     val columns = readInternalTable(columnTable)
     val tablesData = tables.map { tableRecord =>
-      val (tableName, filePath) = toTable(tableRecord, readFileIdToPath)
+      val (tableName, filePath) = toTable(tableRecord, fileIdMapper.fileIdToPath)
       tableName -> filePath
     }.toMap
     val columnsData = columns.foldLeft(Map.empty[String, List[Column]]) { case (tableColumnDefinition, columnRecord) =>
@@ -122,16 +133,6 @@ class SystemCatalogManager(val basePath: String) {
       StoredTableData(TableData(tableName, columnsData(tableName)), filePath)
     }.toList
     SystemCatalog(tableInfo)
-  }
-
-  private def readFileIdToPath: Map[Long, String] = {
-    val files = readInternalTable(fileTable)
-    val fileIdToPath = files.map { record =>
-      val id = record.values.find(_.column.name == "id").get.value.asInstanceOf[Long]
-      val filePath = record.values.find(_.column.name == "filePath").get.value.asInstanceOf[String]
-      id -> filePath
-    }.toMap
-    fileIdToPath
   }
 
   private def readInternalTable(tableData: TableData): List[Record] = {

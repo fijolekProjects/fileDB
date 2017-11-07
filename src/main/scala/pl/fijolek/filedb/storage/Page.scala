@@ -29,16 +29,16 @@ case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte]) {
     this.copy(recordBytes = newRecordBytes)
   }
 
-  def write(): Unit = {
+  def bytes: Array[Byte] = {
     val headerBytes = header.toBytes
-    val toWrite = headerBytes ++ recordBytes
-    FileUtils.write(header.filePath, header.offset, toWrite)
+    headerBytes ++ recordBytes
   }
 
   def spareBytesAtTheEnd: Int = {
     header.spareBytesAtTheEnd
   }
 
+  def pageId = header.pageId
   def offset = header.offset
 
   private def header: PageHeader = {
@@ -56,8 +56,8 @@ object Page {
     new Page(headerBytes = headerBytes, recordBytes = recordBytes)
   }
 
-  def newPage(tableData: TableData, filePath: String, offset: Long): Page = {
-    val headerBytes = PageHeader.newHeader(filePath, offset).toBytes
+  def newPage(tableData: TableData, fileId: Long, offset: Long): Page = {
+    val headerBytes = PageHeader.newHeader(fileId, offset).toBytes
     val recordBytes = new Array[Byte](0)
     new Page(headerBytes = headerBytes, recordBytes = recordBytes)
   }
@@ -80,24 +80,26 @@ object Page {
 
 }
 
-case class PageId(filePath: String, offset: Long) {
+case class PageId(fileId: Long, offset: Long) {
   def toBytes = {
-    val filePathBuffer = ByteBuffer.allocate(DbConstants.filePathSize)
-    val buffer = ByteBuffer.allocate(DbConstants.pageIdSize - DbConstants.filePathSize)
-    filePathBuffer.put(filePath.getBytes).array() ++ buffer.putLong(offset).array()
+    ByteBuffer.allocate(DbConstants.pageIdSize)
+      .putLong(fileId)
+      .putLong(offset)
+      .array()
   }
 }
 
 object PageId {
   def fromBytes(bytes: Array[Byte]): PageId = {
-    val (filePathBytes, offsetBytes) = (bytes.take(DbConstants.filePathSize), bytes.drop(DbConstants.filePathSize))
-    PageId(filePath = new String(filePathBytes.takeWhile(_ != 0)), offset = ByteBuffer.wrap(offsetBytes).getLong)
+    val buffer = ByteBuffer.wrap(bytes)
+    val fileId = buffer.getLong
+    val offset = buffer.getLong
+    PageId(fileId = fileId, offset = offset)
   }
 }
 
 case class PageHeader(pageId: PageId, spareBytesAtTheEnd: Int) {
   def offset = pageId.offset
-  def filePath = pageId.filePath
 
   def toBytes: Array[Byte] = {
     val buffer = ByteBuffer.allocate(DbConstants.pageHeaderSize)
@@ -118,8 +120,8 @@ object PageHeader {
     PageHeader(pageId = PageId.fromBytes(pageIdBytes), spareBytesAtTheEnd = ByteBuffer.wrap(restBytes).getInt)
   }
 
-  def newHeader(filePath: String, offset: Long): PageHeader = {
-    val pageId = PageId(filePath = filePath, offset = offset)
+  def newHeader(fileId: Long, offset: Long): PageHeader = {
+    val pageId = PageId(fileId = fileId, offset = offset)
     new PageHeader(pageId = pageId, spareBytesAtTheEnd = DbConstants.pageSize - DbConstants.pageHeaderSize)
   }
 }

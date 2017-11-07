@@ -2,6 +2,8 @@ package pl.fijolek.filedb.storage
 
 import java.util
 
+import scala.collection.mutable.ArrayBuffer
+
 case class TableData(name: String, columnsDefinition: List[Column]) {
   val recordSize: Int = {
     columnsDefinition.map(_.typ.sizeInBytes).sum
@@ -38,6 +40,18 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
   private def readRecord(buffer: Array[Byte], recordIndex: Int): Option[Record] = {
     val recordBytes = util.Arrays.copyOfRange(buffer, recordIndex * recordSize, recordIndex * recordSize + recordSize)
     Record.fromBytes(recordBytes, columnsDefinition)
+  }
+
+}
+
+object TableData {
+  def readRecords(tableData: TableData, filePath: String): List[Record] = {
+    val records = new ArrayBuffer[Record]()
+    FileUtils.traverse(filePath) { page =>
+      val recordsRead = tableData.readRecords(page)
+      records ++= recordsRead
+    }
+    records.toList
   }
 
 }

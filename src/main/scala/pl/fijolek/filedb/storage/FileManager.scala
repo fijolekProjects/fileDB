@@ -5,7 +5,7 @@ package pl.fijolek.filedb.storage
 // - heap file organization
 // - unspanned records
 class FileManager(systemCatalogManager: SystemCatalogManager){
-  val recordsIO = new RecordsIO
+  val recordsIO = new RecordsIO(systemCatalogManager.basePath)
 
   def insertRecords(tableName: String, records: List[Record]): Unit = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)

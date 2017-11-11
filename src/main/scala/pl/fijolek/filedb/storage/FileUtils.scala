@@ -8,14 +8,12 @@ object FileUtils {
     withFileOpen(filePath) { file =>
       val buffer = new Array[Byte](DbConstants.pageSize)
       var bytesRead = -1
-      var pageCount = 0
       while ( {
         bytesRead = file.read(buffer)
         bytesRead != -1
       }) {
         val page = Page.apply(buffer)
         process(page)
-        pageCount += 1
       }
     }
   }

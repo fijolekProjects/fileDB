@@ -45,7 +45,7 @@ object Record {
           java.util.Arrays.copyOf(stringBytes, sizeInBytes)
         case _: ColumnTypes.BigInt.type =>
           ByteBuffer.allocate(sizeInBytes).putLong(value.value.asInstanceOf[Long]).array()
-        case numType: ColumnTypes.Numeric =>
+        case _: ColumnTypes.Numeric =>
           //          val bytes = value.value.asInstanceOf[BigDecimal].setScale(numType.scale).underlying().unscaledValue().toByteArray
           //          watch out for little/big endian - BigInteger assumes big-endian
           //          System.arraycopy(bytes, 0, bytesToWrite, sizeInBytes - bytes.length, bytes.length)

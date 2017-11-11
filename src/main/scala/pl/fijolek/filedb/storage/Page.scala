@@ -56,7 +56,7 @@ object Page {
     new Page(headerBytes = headerBytes, recordBytes = recordBytes)
   }
 
-  def newPage(tableData: TableData, fileId: Long, offset: Long): Page = {
+  def newPage(fileId: Long, offset: Long): Page = {
     val headerBytes = PageHeader.newHeader(fileId, offset).toBytes
     val recordBytes = new Array[Byte](0)
     new Page(headerBytes = headerBytes, recordBytes = recordBytes)

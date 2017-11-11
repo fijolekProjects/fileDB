@@ -4,6 +4,7 @@ import java.nio.file.{Files, Paths}
 
 import org.scalatest.{BeforeAndAfterEach, FeatureSpec, Matchers}
 import pl.fijolek.filedb.storage.ColumnTypes.Varchar
+import com.github.ghik.silencer.silent
 
 class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
@@ -13,15 +14,16 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    cleanTables
+    cleanTables()
     systemCatalogManager.init()
   }
   override protected def afterEach(): Unit = {
     super.afterEach()
-    cleanTables
+    cleanTables()
   }
 
-  private def cleanTables = {
+  @silent
+  private def cleanTables(): Unit = {
     Files.deleteIfExists(Paths.get(basePath, "instructor"))
     Files.deleteIfExists(Paths.get(basePath, "file"))
     Files.deleteIfExists(Paths.get(basePath, "table"))

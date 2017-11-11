@@ -1,7 +1,5 @@
 package pl.fijolek.filedb.storage
 
-import scala.collection.mutable.ArrayBuffer
-
 class RecordsIO(basePath: String) {
   private val fileIdMapper = new FileIdMapper(basePath)
 
@@ -16,7 +14,7 @@ class RecordsIO(basePath: String) {
 
   def insertRecords(data: TableData, filePath: String, records: List[Record], fileId: Long): Unit = {
     val recordsToWriteSize = records.length * data.recordSize
-    val lastPage = Page.lastPage(filePath).getOrElse(Page.newPage(data, fileId, 0))
+    val lastPage = Page.lastPage(filePath).getOrElse(Page.newPage(fileId, 0))
     val pagesToWrite = if (lastPage.spareBytesAtTheEnd > recordsToWriteSize) {
       List(lastPage.add(records.map(_.toBytes)))
     } else {
@@ -30,7 +28,7 @@ class RecordsIO(basePath: String) {
         val recordsOffset = i * recordsInSinglePageCount + recordsThatFitsInLastPageCount
         val newPageRecords = records.slice(recordsOffset, recordsOffset + recordsInSinglePageCount)
         val newPageRecordsBytes = newPageRecords.map(_.toBytes)
-        val newPage = Page.newPage(data, fileId, pageOffset)
+        val newPage = Page.newPage(fileId, pageOffset)
         newPage.add(newPageRecordsBytes)
       }
       lastPageFull :: newPages
@@ -55,17 +53,5 @@ class RecordsIO(basePath: String) {
     FileUtils.write(filePath, page.pageId.offset, toWrite)
   }
 
-
-}
-
-class TableReader {
-  def readRecords(tableData: TableData, filePath: String): List[Record] = {
-    val records = new ArrayBuffer[Record]()
-    FileUtils.traverse(filePath) { page =>
-      val recordsRead = tableData.readRecords(page)
-      records ++= recordsRead
-    }
-    records.toList
-  }
 
 }

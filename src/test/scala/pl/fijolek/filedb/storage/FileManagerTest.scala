@@ -9,8 +9,11 @@ import com.github.ghik.silencer.silent
 class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
   val basePath = "/tmp/filedb"
-  val systemCatalogManager = new SystemCatalogManager(basePath)
-  val fileManager = new FileManager(systemCatalogManager)
+  val fileIdMapper = new FileIdMapper(basePath)
+  val pageIO = new PageIO(fileIdMapper)
+  val recordsIO = new RecordsIO(fileIdMapper, pageIO)
+  val systemCatalogManager = new SystemCatalogManager(basePath, recordsIO, fileIdMapper)
+  val fileManager = new FileManager(systemCatalogManager, recordsIO)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()

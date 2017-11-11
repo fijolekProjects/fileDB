@@ -2,9 +2,7 @@ package pl.fijolek.filedb.storage
 
 import scala.collection.mutable.ArrayBuffer
 
-class RecordsIO(basePath: String) {
-  private val fileIdMapper = new FileIdMapper(basePath)
-  private val pageIO = new PageIO(fileIdMapper)
+class RecordsIO(fileIdMapper: FileIdMapper, pageIO: PageIO) {
 
   def readRecords(storedTableData: StoredTableData): List[Record] = {
     val tableData = storedTableData.data

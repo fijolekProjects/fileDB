@@ -82,11 +82,8 @@ object SystemCatalogManager {
 
 }
 
-class SystemCatalogManager(val basePath: String) {
+class SystemCatalogManager(val basePath: String, recordsIO: RecordsIO, fileIdMapper: FileIdMapper) {
   import SystemCatalogManager._
-
-  private val recordsIO = new RecordsIO(basePath)
-  private val fileIdMapper = new FileIdMapper(basePath)
 
   def init(): Unit = {
     createTable(fileTable, fileTableFileId)

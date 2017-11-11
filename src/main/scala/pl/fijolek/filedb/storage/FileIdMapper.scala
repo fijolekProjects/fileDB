@@ -4,6 +4,8 @@ import java.nio.file.Paths
 
 import pl.fijolek.filedb.storage.SystemCatalogManager.fileTable
 
+import scala.collection.mutable.ArrayBuffer
+
 class FileIdMapper(basePath: String) {
 
   def path(fileId: Long): String = {
@@ -21,7 +23,7 @@ class FileIdMapper(basePath: String) {
   }
 
   def fileIdToPath: Map[Long, String] = {
-    val files = TableData.readRecords(fileTable, Paths.get(basePath, fileTable.name).toFile.getAbsolutePath)
+    val files = readRecords(fileTable, Paths.get(basePath, fileTable.name).toFile.getAbsolutePath)
     val fileIdToPath = files.map { record =>
       val id = record.values.find(_.column.name == "id").get.value.asInstanceOf[Long]
       val filePath = record.values.find(_.column.name == "filePath").get.value.asInstanceOf[String]
@@ -29,5 +31,24 @@ class FileIdMapper(basePath: String) {
     }.toMap
     fileIdToPath
   }
+
+  def maxFileId = {
+    val files = readRecords(fileTable, Paths.get(basePath, fileTable.name).toFile.getAbsolutePath)
+    val ids = files.map { record =>
+      val id = record.values.find(_.column.name == "id").get.value.asInstanceOf[Long]
+      id
+    }
+    ids.max
+  }
+
+  private def readRecords(tableData: TableData, filePath: String): List[Record] = {
+    val records = new ArrayBuffer[Record]()
+    FileUtils.traverse(filePath) { page =>
+      val recordsRead = tableData.readRecords(page)
+      records ++= recordsRead
+    }
+    records.toList
+  }
+
 
 }

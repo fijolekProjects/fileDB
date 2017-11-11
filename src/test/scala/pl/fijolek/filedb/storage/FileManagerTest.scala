@@ -71,9 +71,9 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
       defaultCatalog shouldBe SystemCatalog(
         List(
-          StoredTableData(SystemCatalogManager.fileTable, "/tmp/filedb/file"),
-          StoredTableData(SystemCatalogManager.tableTable, "/tmp/filedb/table"),
-          StoredTableData(SystemCatalogManager.columnTable, "/tmp/filedb/column")
+          StoredTableData(SystemCatalogManager.fileTable, -1),
+          StoredTableData(SystemCatalogManager.tableTable, -2),
+          StoredTableData(SystemCatalogManager.columnTable, -3)
         )
       )
       fileManager.readRecords("file") shouldBe internalFileRecords
@@ -88,7 +88,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
 
       systemCatalogManager.readCatalog shouldBe SystemCatalog(
         defaultCatalog.tables ++ List(
-          StoredTableData(instructorTableData, "/tmp/filedb/instructor")
+          StoredTableData(instructorTableData, 0)
         )
       )
     }

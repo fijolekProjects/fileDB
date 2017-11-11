@@ -9,18 +9,18 @@ class FileManager(systemCatalogManager: SystemCatalogManager){
 
   def insertRecords(tableName: String, records: List[Record]): Unit = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
-    recordsIO.insertRecords(storedTableData.data, storedTableData.filePath, records)
+    recordsIO.insertRecords(storedTableData, records)
   }
 
   //TODO make it lazy? or fetch just n buffers
   def readRecords(tableName: String): List[Record] = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
-    recordsIO.readRecords(storedTableData.data, storedTableData.filePath)
+    recordsIO.readRecords(storedTableData)
   }
 
   def deleteRecord(tableName: String, record: Record): Unit = {
     val storedTableData = systemCatalogManager.readCatalog.tablesByName(tableName)
-    recordsIO.delete(storedTableData.data, storedTableData.filePath, record)
+    recordsIO.delete(storedTableData, record)
   }
 
 }

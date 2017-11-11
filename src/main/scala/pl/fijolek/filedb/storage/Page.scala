@@ -62,22 +62,6 @@ object Page {
     new Page(headerBytes = headerBytes, recordBytes = recordBytes)
   }
 
-  def lastPage(filePath: String): Option[Page] = {
-    FileUtils.withFileOpen(filePath) { file =>
-      val fileSize = file.length()
-      if (fileSize == 0) {
-        None
-      } else {
-        val pageOffset = (fileSize / DbConstants.pageSize) * DbConstants.pageSize
-        file.seek(pageOffset)
-        val pageBytes = new Array[Byte](DbConstants.pageSize)
-        file.read(pageBytes)
-        Some(Page(pageBytes))
-      }
-    }
-
-  }
-
 }
 
 case class PageId(fileId: Long, offset: Long) {

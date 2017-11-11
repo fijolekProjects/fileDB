@@ -95,7 +95,7 @@ class SystemCatalogManager(val basePath: String) {
   }
 
   def createTable(tableData: TableData): Unit = {
-    val fileId = maxFileId + 1
+    val fileId = fileIdMapper.maxFileId + 1
     createTable(tableData, fileId)
   }
 
@@ -105,42 +105,33 @@ class SystemCatalogManager(val basePath: String) {
     val fileRecord = toFileRecord(fileId, tableFile)
     val tableRecord = toTableRecord(tableData, fileId)
     val columnsRecords = tableData.columnsDefinition.map { columnDef => toColumnRecord(columnDef, tableData.name) }
-    recordsIO.insertRecords(fileTable, filePath(fileTable).getAbsolutePath, List(fileRecord), fileTableFileId)
-    recordsIO.insertRecords(tableTable, filePath(tableTable).getAbsolutePath, List(tableRecord), tableTableFileId)
-    recordsIO.insertRecords(columnTable, filePath(columnTable).getAbsolutePath, columnsRecords, columnTableFileId)
+    recordsIO.insertRecords(StoredTableData(fileTable, fileTableFileId), List(fileRecord))
+    recordsIO.insertRecords(StoredTableData(tableTable, tableTableFileId), List(tableRecord))
+    recordsIO.insertRecords(StoredTableData(columnTable, columnTableFileId), columnsRecords)
     ()
   }
 
-  private def maxFileId: Long = {
-    val fileIdToPath = fileIdMapper.fileIdToPath
-    val ids = fileIdToPath.keys.toList
-    if (ids.isEmpty) -1 else ids.max
-  }
-
   def readCatalog: SystemCatalog = {
-    val tables = readInternalTable(tableTable)
-    val columns = readInternalTable(columnTable)
+    val tables = readInternalTable(StoredTableData(tableTable, tableTableFileId))
+    val columns = readInternalTable(StoredTableData(columnTable, columnTableFileId))
     val tablesData = tables.map { tableRecord =>
-      val (tableName, filePath) = toTable(tableRecord, fileIdMapper.fileIdToPath)
-      tableName -> filePath
+      val tableName = tableRecord.values(0).value.toString
+      val fileId = tableRecord.values(1).value.asInstanceOf[Long]
+      tableName -> fileId
     }.toMap
     val columnsData = columns.foldLeft(Map.empty[String, List[Column]]) { case (tableColumnDefinition, columnRecord) =>
       val (tableId, column) = toColumn(columnRecord)
       val columns = tableColumnDefinition.getOrElse(tableId, List.empty[Column])
       tableColumnDefinition.updated(tableId, columns ++ List(column))
     }
-    val tableInfo = tablesData.map { case (tableName, filePath) =>
-      StoredTableData(TableData(tableName, columnsData(tableName)), filePath)
+    val tableInfo = tablesData.map { case (tableName, fileId) =>
+      StoredTableData(TableData(tableName, columnsData(tableName)), fileId)
     }.toList
     SystemCatalog(tableInfo)
   }
 
-  private def readInternalTable(tableData: TableData): List[Record] = {
-    val file = filePath(tableData)
-    if (!file.exists()) {
-      FileUtils.touchFile(file)
-    }
-    recordsIO.readRecords(tableData, file.getAbsolutePath)
+  private def readInternalTable(storedTableData: StoredTableData): List[Record] = {
+    recordsIO.readRecords(storedTableData)
   }
 
   private def filePath(tableData: TableData): File = {
@@ -153,4 +144,4 @@ case class SystemCatalog(tables: List[StoredTableData]) {
   val tablesByName = tables.map(table => (table.data.name, table)).toMap
 }
 
-case class StoredTableData(data: TableData, filePath: String)
+case class StoredTableData(data: TableData, fileId: Long)

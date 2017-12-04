@@ -2,7 +2,7 @@ package pl.fijolek.filedb.storage.bplustree
 
 import java.util.concurrent.atomic.AtomicLong
 
-import InMemoryBPlusTree.RefId
+import InMemoryBPlusTree.{RefId, RefIdNode, RefNode}
 
 import scala.annotation.tailrec
 import scala.collection.IterableLike
@@ -10,67 +10,132 @@ import scala.collection.generic.CanBuildFrom
 import scala.collection.immutable.TreeMap
 import CollectionImplicits._
 
-case class InMemoryBPlusTree private(root: RootNodeAbstract, degree: Int, nodes: Map[RefId, InnerNode], rootRefId: RefId) {
+case class InMemoryBPlusTree private(degree: Int, root: RefIdNode[RootNodeAbstract], nodes: Map[RefId, InnerNode]) {
+  import InMemoryBPlusTree.inMemoryBPlusTreeModification
 
-    def insert(record: Record): InMemoryBPlusTree = {
-      root match {
-        case SingleNodeTree(records) =>
-          val newRecords = (record :: records).sortBy(_.key)
-          val rootWithNewRecord = SingleNodeTree(newRecords)
-          val result = growTree(rootWithNewRecord, RootRef, List.empty, Map.empty)
-          this.copy(root = result.root, nodes = result.nodes)
-        case _: Root =>
-          val (_, ref, parents) = searchWithRef(record.key)
-          val node = findById[Leaf](ref.internalId)
-          val newRecords = (record :: node.records).sortBy(_.key)
-          val leaf = node.copy(records = newRecords)
-          val result = growTree(leaf, ref, parents, Map.empty)
-          this.copy(root = result.root, nodes = result.nodes)
-      }
-    }
-
-  case class GrowTreeResult(root: RootNodeAbstract, nodes: Map[RefId, InnerNode])
-
-  @tailrec
-  private def growTree(node: Node, currentNodeRef: Ref, parents: List[(Ref, ParentNode)], newNodes: Map[RefId, InnerNode]): GrowTreeResult = {
-    node match {
-      case innerNode: InnerNode =>
-        if (innerNode.size == degree) {
-          val (parentRef, parentNode) :: otherParents = parents
-          val splitResult = split(innerNode, currentNodeRef.internalId)
-          val newRefs = (splitResult.newRefs ++ parentNode.refs).distinctBy(_.key).sortBy(_.key)
-          val newKeys = (splitResult.keyToPromote :: parentNode.keys).sorted
-          val newParent = parentNode.withValues(keys = newKeys, refs = newRefs)
-          growTree(newParent, parentRef, otherParents, newNodes ++ splitResult.nodeIdPairs)
-        } else {
-          GrowTreeResult(root, this.nodes ++ newNodes ++ Map(currentNodeRef.internalId -> innerNode))
-        }
-      case r: RootNodeAbstract =>
-        if (r.size == degree) {
-          val rootSplitResult = split(r, rootRefId)
-          val newRoot = Root(keys = List(rootSplitResult.keyToPromote), refs = rootSplitResult.newRefs)
-          growTree(newRoot, RootRef, List.empty, newNodes ++ rootSplitResult.nodeIdPairs)
-        } else {
-          GrowTreeResult(r, nodes = this.nodes ++ newNodes)
-        }
+  def insert(record: Record): InMemoryBPlusTree = {
+    root.node match {
+      case SingleNodeTree(records) =>
+        val newRecords = (record :: records).sortBy(_.key)
+        val rootWithNewRecord = SingleNodeTree(newRecords)
+        val result = inMemoryBPlusTreeModification.growTree(degree, root, RefIdNode(RootRef.internalId, rootWithNewRecord), List.empty)
+        this.copy(root = result.root, nodes = this.nodes ++ result.changedNodes)
+      case _: Root =>
+        val (_, ref, parents) = searchWithRef(record.key)
+        val node = findById[Leaf](ref.internalId)
+        val newRecords = (record :: node.records).sortBy(_.key)
+        val leaf = node.copy(records = newRecords)
+        val result = inMemoryBPlusTreeModification.growTree(degree, root, RefIdNode(ref.internalId, leaf), parents)
+        this.copy(root = result.root, nodes = this.nodes ++ result.changedNodes)
     }
   }
 
-  case class SplitResult(keyToPromote: Long, leftNode: InnerNode, leftRefId: RefId, rightNode: InnerNode, rightRefId: RefId) {
+  def search(key: Long): Option[Record] = {
+    searchWithRef(key)._1
+  }
+
+  private def searchWithRef(key: Long): (Option[Record], Ref, List[RefNode[ParentNode]]) = {
+    InMemoryBPlusTree.searchWithRef(root.node, key)(refId => findById[InnerNode](refId))
+  }
+
+  def prettyPrint(): PrettyTree = {
+    new PrettyPrinter(root.node, nodes).prettyPrint()
+  }
+
+  private def findById[N <: InnerNode](id: RefId): N = {
+    nodes(id).asInstanceOf[N]
+  }
+
+}
+
+object InMemoryBPlusTree {
+
+  type RefId = Long
+  private val idGenerator = new AtomicLong(0)
+  private def nextRefId(): RefId = {
+    idGenerator.incrementAndGet()
+  }
+
+  case class RefIdNode[N <: Node](refId: RefId, node: N)
+  case class RefNode[N <: Node](ref: Ref, node: N)
+
+  val inMemoryBPlusTreeModification = new InMemoryBPlusTreeModification(() => nextRefId())
+
+  def apply(degree: Int): InMemoryBPlusTree = {
+    new InMemoryBPlusTree(degree, RefIdNode(RootRef.internalId, SingleNodeTree(List.empty)), Map.empty)
+  }
+
+  def searchWithRef(root: RootNodeAbstract, key: Long)(findById: RefId => InnerNode): (Option[Record], Ref, List[RefNode[ParentNode]])  = {
+
+    @tailrec
+    def findLeaf(key: Long, keys: List[Long], refs: List[Ref], parents: List[RefNode[ParentNode]]): (Option[Record], Ref, List[RefNode[ParentNode]]) = {
+      val refIdx = keys.toIterator.zipWithIndex.find(_._1 > key).map(_._2).getOrElse(keys.size)
+      val ref = refs(refIdx)
+      findById(ref.internalId) match {
+        case Leaf(records) =>
+          (records.find(_.key == key), ref, parents)
+        case internal@Internal(internalKeys, internalRefs) =>
+          findLeaf(key, internalKeys, internalRefs, RefNode[ParentNode](ref, internal) :: parents)
+      }
+    }
+
+    root match {
+      case SingleNodeTree(records) =>
+        (records.find(_.key == key), RootRef, List.empty)
+      case root@Root(keys, refs) =>
+        findLeaf(key, keys, refs, List(RefNode[ParentNode](RootRef, root)))
+    }
+  }
+
+}
+
+class InMemoryBPlusTreeModification(nextRefId: () => RefId) {
+  case class GrowTreeResult(root: RefIdNode[RootNodeAbstract], changedNodes: Map[RefId, InnerNode])
+
+  case class SplitResult(keyToPromote: Long, leftNode: RefIdNode[InnerNode], rightNode: RefIdNode[InnerNode]) {
     def key(n: InnerNode) = n match {
       case Internal(keys, _) => keys.head
       case Leaf(records) => records.head.key
     }
-    val newRefs = List(Ref(key(leftNode), leftRefId), Ref(key(rightNode), rightRefId))
-    val nodeIdPairs = Map((leftRefId, leftNode), (rightRefId, rightNode))
+    val newRefs = List(Ref(key(leftNode.node), leftNode.refId), Ref(key(rightNode.node), rightNode.refId))
+    val nodeIdPairs = Map((leftNode.refId, leftNode.node), (rightNode.refId, rightNode.node))
   }
 
-  private def split(node: Node, refId: RefId): SplitResult = {
+  def growTree(degree: Int, root: RefIdNode[RootNodeAbstract], currentNode: RefIdNode[Node], parents: List[RefNode[ParentNode]]): GrowTreeResult = {
+    innerGrowTree(degree, root, currentNode, parents, Map.empty)
+  }
+
+  @tailrec
+  private def innerGrowTree(degree: Int, root: RefIdNode[RootNodeAbstract], currentNode: RefIdNode[Node], parents: List[RefNode[ParentNode]], newNodes: Map[RefId, InnerNode]): GrowTreeResult = {
+    currentNode.node match {
+      case innerNode: InnerNode =>
+        if (innerNode.size == degree) {
+          val RefNode(parentRef, parentNode) :: otherParents = parents
+          val splitResult = split(currentNode)
+          val newRefs = (splitResult.newRefs ++ parentNode.refs).distinctBy(_.key).sortBy(_.key)
+          val newKeys = (splitResult.keyToPromote :: parentNode.keys).sorted
+          val newParent = parentNode.withValues(keys = newKeys, refs = newRefs)
+          innerGrowTree(degree, root, RefIdNode(parentRef.internalId, newParent), otherParents, newNodes ++ splitResult.nodeIdPairs)
+        } else {
+          GrowTreeResult(root, newNodes ++ Map(currentNode.refId -> innerNode))
+        }
+      case r: RootNodeAbstract =>
+        if (r.size == degree) {
+          val rootSplitResult = split(currentNode)
+          val newRoot = Root(keys = List(rootSplitResult.keyToPromote), refs = rootSplitResult.newRefs)
+          innerGrowTree(degree, root, RefIdNode(RootRef.internalId, newRoot), List.empty, newNodes ++ rootSplitResult.nodeIdPairs)
+        } else {
+          GrowTreeResult(root.copy(node = r), changedNodes = newNodes)
+        }
+    }
+  }
+
+  private def split(node: RefIdNode[Node]): SplitResult = {
     def splitRecords(records: List[Record], allocateSpaceForBothNewNodes: Boolean): SplitResult = {
       val (leftRecords, rightRecords) = records.splitInHalves
-      val (leftRefId, rightRefId) = (nextRefId(), if (allocateSpaceForBothNewNodes) nextRefId() else refId)
+      val (leftRefId, rightRefId) = (nextRefId(), if (allocateSpaceForBothNewNodes) nextRefId() else node.refId)
       val keyToPromote = rightRecords.head.key
-      SplitResult(keyToPromote, Leaf(leftRecords), leftRefId, Leaf(rightRecords), rightRefId)
+      SplitResult(keyToPromote, RefIdNode(leftRefId, Leaf(leftRecords)), RefIdNode(rightRefId, Leaf(rightRecords)))
     }
     def splitKeyRefs(keys: List[Long], refs: List[Ref], allocateSpaceForBothNewNodes: Boolean): SplitResult = {
       val medianKeyIndex = keys.size / 2
@@ -78,10 +143,10 @@ case class InMemoryBPlusTree private(root: RootNodeAbstract, degree: Int, nodes:
       val keysWithoutMedianValue = keys.zipWithIndex.filter(_._2 != medianKeyIndex).map(_._1)
       val (leftKeys, rightKeys) = keysWithoutMedianValue.splitInHalves
       val (leftRefs, rightRefs) = refs.partition(_.key < medianKey)
-      val (leftRefId, rightRefId) = (nextRefId(), if (allocateSpaceForBothNewNodes) nextRefId() else refId)
-      SplitResult(medianKey, Internal(leftKeys, leftRefs), leftRefId, Internal(rightKeys, rightRefs), rightRefId)
+      val (leftRefId, rightRefId) = (nextRefId(), if (allocateSpaceForBothNewNodes) nextRefId() else node.refId)
+      SplitResult(medianKey, RefIdNode(leftRefId, Internal(leftKeys, leftRefs)), RefIdNode(rightRefId, Internal(rightKeys, rightRefs)) )
     }
-    node match {
+    node.node match {
       case Leaf(records) =>
         splitRecords(records, allocateSpaceForBothNewNodes = false)
       case SingleNodeTree(records) =>
@@ -93,54 +158,6 @@ case class InMemoryBPlusTree private(root: RootNodeAbstract, degree: Int, nodes:
     }
   }
 
-  def search(key: Long): Option[Record]  = {
-    searchWithRef(key)._1
-  }
-
-  private def searchWithRef(key: Long): (Option[Record], Ref, List[(Ref, ParentNode)])  = {
-    @tailrec
-    def findLeaf(key: Long, keys: List[Long], refs: List[Ref], parents: List[(Ref, ParentNode)]): (Option[Record], Ref, List[(Ref, ParentNode)]) = {
-      val refIdx = keys.toIterator.zipWithIndex.find(_._1 > key).map(_._2).getOrElse(keys.size)
-      val ref = refs(refIdx)
-      findById[InnerNode](ref.internalId) match {
-        case Leaf(records) =>
-          (records.find(_.key == key), ref, parents)
-        case internal@Internal(keys, refs) =>
-          findLeaf(key, keys, refs, (ref, internal) :: parents)
-      }
-    }
-
-    root match {
-      case SingleNodeTree(records) =>
-        (records.find(_.key == key), RootRef, List.empty)
-      case root@Root(keys, refs) =>
-        findLeaf(key, keys, refs, List((RootRef, root)))
-    }
-  }
-
-  def prettyPrint(): PrettyTree = {
-    new PrettyPrinter(root, nodes).prettyPrint()
-  }
-
-  private def findById[N <: InnerNode](id: RefId): N = {
-    nodes(id).asInstanceOf[N]
-  }
-
-  private def nextRefId(): RefId = {
-    InMemoryBPlusTree.nextId()
-  }
-
-
-}
-
-object InMemoryBPlusTree {
-  type RefId = Long
-  def apply(degree: Int): InMemoryBPlusTree = {
-    new InMemoryBPlusTree(SingleNodeTree(List.empty), degree, Map.empty, RootRef.internalId)
-  }
-
-  private val idGenerator = new AtomicLong(0)
-  def nextId(): Long = idGenerator.incrementAndGet()
 }
 
 sealed trait Node {
@@ -154,6 +171,7 @@ sealed trait Node {
   }
 
 }
+
 sealed trait RootNodeAbstract extends Node
 
 sealed trait InnerNode extends Node

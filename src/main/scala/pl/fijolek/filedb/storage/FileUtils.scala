@@ -2,6 +2,8 @@ package pl.fijolek.filedb.storage
 
 import java.io.{File, RandomAccessFile}
 
+import com.github.ghik.silencer.silent
+
 object FileUtils {
 
   def traverse(filePath: String)(process: Page => Unit): Unit = {
@@ -18,10 +20,28 @@ object FileUtils {
     }
   }
 
+  def read(filePath: String, offset: Long): Array[Byte] = {
+    val file = new RandomAccessFile(filePath, "rw")
+    try {
+      val buffer = new Array[Byte](DbConstants.pageSize)
+      file.seek(offset)
+      @silent val unused = file.read(buffer)
+      buffer
+    } finally {
+      file.close()
+    }
+  }
+
   def write(filePath: String, offset: Long, bytes: Array[Byte]): Unit = {
     withFileOpen(filePath) { file =>
       file.seek(offset)
       file.write(bytes)
+    }
+  }
+
+  def fileSize(filePath: String): Long = {
+    withFileOpen(filePath) { file =>
+      file.length()
     }
   }
 

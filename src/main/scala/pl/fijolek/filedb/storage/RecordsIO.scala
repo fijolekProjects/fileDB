@@ -25,7 +25,7 @@ class RecordsIO(fileIdMapper: FileIdMapper, pageIO: PageIO) {
     } else {
       val recordsThatFitsInLastPageCount = lastPage.spareBytesAtTheEnd / recordSize
       val recordsToWriteInOtherPagesCount = records.length - recordsThatFitsInLastPageCount
-      val recordsInSinglePageCount = (DbConstants.pageSize - DbConstants.pageHeaderSize) / recordSize
+      val recordsInSinglePageCount = DbConstants.pageDataSize / recordSize
       val newPagesCount = Math.ceil(recordsToWriteInOtherPagesCount.toDouble / recordsInSinglePageCount.toDouble).toInt
       val lastPageFull = lastPage.add(records.take(recordsThatFitsInLastPageCount).map(_.toBytes))
       val newPages = (0 until newPagesCount).toList.map { i =>

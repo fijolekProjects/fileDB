@@ -2,6 +2,7 @@ package pl.fijolek.filedb.storage
 
 import java.nio.ByteBuffer
 
+//TODO page should be record-agnostic, there should be header and data only
 case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte]) {
 
   def add(records: List[Array[Byte]]): Page = {

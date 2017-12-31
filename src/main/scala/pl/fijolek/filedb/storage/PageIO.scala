@@ -1,11 +1,17 @@
 package pl.fijolek.filedb.storage
 
-class PageIO(fileIdMapper: FileIdMapper) {
+class PageIO(val fileIdMapper: FileIdMapper) {
 
   def writePage(page: Page): Unit = {
     val filePath = fileIdMapper.path(page.pageId.fileId)
     val toWrite = page.bytes
     FileUtils.write(filePath, page.pageId.offset, toWrite)
+  }
+
+  def read(pageId: PageId): Page = {
+    val filePath = fileIdMapper.path(pageId.fileId)
+    val pageBytes = FileUtils.read(filePath, pageId.offset)
+    Page(pageBytes)
   }
 
   def lastPage(fileId: Long): Option[Page] = {

@@ -5,4 +5,5 @@ object DbConstants {
   val filePathSize = 100
   val pageIdSize = java.lang.Long.BYTES + java.lang.Long.BYTES
   val pageHeaderSize = pageIdSize + java.lang.Integer.BYTES
+  val pageDataSize = DbConstants.pageSize - DbConstants.pageHeaderSize
 }

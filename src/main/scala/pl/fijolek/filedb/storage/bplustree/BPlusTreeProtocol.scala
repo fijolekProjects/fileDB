@@ -117,7 +117,7 @@ object BPlusTreeProtocol {
   }
 
   def pageToNode(page: Page): Node = {
-    val pageToRead = ByteBuffer.wrap(page.recordBytes)
+    val pageToRead = ByteBuffer.wrap(page.dataBytes)
     charTyNodeType(pageToRead.getChar) match {
       case "SingleNodeTree" =>
         val degree = pageToRead.getInt

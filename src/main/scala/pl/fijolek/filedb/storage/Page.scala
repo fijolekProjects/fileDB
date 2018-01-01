@@ -2,37 +2,36 @@ package pl.fijolek.filedb.storage
 
 import java.nio.ByteBuffer
 
-//TODO page should be record-agnostic, there should be header and data only
-case class Page(headerBytes: Array[Byte], recordBytes: Array[Byte]) {
+case class Page(headerBytes: Array[Byte], dataBytes: Array[Byte]) {
 
-  def add(records: List[Array[Byte]]): Page = {
-    records.foldLeft(this) { case (newPage, record) =>
-      newPage.add(record)
+  def add(dataEntries: List[Array[Byte]]): Page = {
+    dataEntries.foldLeft(this) { case (newPage, data) =>
+      newPage.add(data)
     }
   }
 
-  def add(record: Array[Byte]): Page = {
-    this.copy(headerBytes = this.header.addRecord(record.length).toBytes, recordBytes = recordBytes ++ record)
+  def add(data: Array[Byte]): Page = {
+    this.copy(headerBytes = this.header.addDataBytes(data.length).toBytes, dataBytes = dataBytes ++ data)
   }
 
-  def remove(recordIndices: List[Int], recordSize: Int): Page = {
-    recordIndices.foldLeft(this) { case (newPage, recordIndex) =>
-      newPage.remove(recordIndex, recordSize)
+  def remove(dataIndices: List[Int], dataSize: Int): Page = {
+    dataIndices.foldLeft(this) { case (newPage, dataIndex) =>
+      newPage.remove(dataIndex, dataSize)
     }
   }
 
-  def remove(recordStartOffset: Int, recordSize: Int): Page = {
-    val rangeToRemove = Range(recordStartOffset, recordStartOffset + recordSize)
-    val newRecordBytes = recordBytes.zipWithIndex.map { case (byt, index) =>
+  def remove(dataStartOffset: Int, dataSize: Int): Page = {
+    val rangeToRemove = Range(dataStartOffset, dataStartOffset + dataSize)
+    val newDataBytes = dataBytes.zipWithIndex.map { case (byt, index) =>
       if (rangeToRemove.contains(index)) 0: Byte
       else byt
     }
-    this.copy(recordBytes = newRecordBytes)
+    this.copy(dataBytes = newDataBytes)
   }
 
   def bytes: Array[Byte] = {
     val headerBytes = header.toBytes
-    headerBytes ++ recordBytes
+    headerBytes ++ dataBytes
   }
 
   def spareBytesAtTheEnd: Int = {
@@ -53,14 +52,14 @@ object Page {
   def apply(bytes: Array[Byte]): Page = {
     val headerBytes = java.util.Arrays.copyOfRange(bytes, 0, DbConstants.pageHeaderSize)
     val header = PageHeader.fromBytes(headerBytes)
-    val recordBytes = java.util.Arrays.copyOfRange(bytes, DbConstants.pageHeaderSize, bytes.length - header.spareBytesAtTheEnd)
-    new Page(headerBytes = headerBytes, recordBytes = recordBytes)
+    val dataBytes = java.util.Arrays.copyOfRange(bytes, DbConstants.pageHeaderSize, bytes.length - header.spareBytesAtTheEnd)
+    new Page(headerBytes = headerBytes, dataBytes = dataBytes)
   }
 
   def newPage(fileId: Long, offset: Long): Page = {
     val headerBytes = PageHeader.newHeader(fileId, offset).toBytes
-    val recordBytes = new Array[Byte](0)
-    new Page(headerBytes = headerBytes, recordBytes = recordBytes)
+    val dataBytes = new Array[Byte](0)
+    new Page(headerBytes = headerBytes, dataBytes = dataBytes)
   }
 
 }
@@ -93,8 +92,8 @@ case class PageHeader(pageId: PageId, spareBytesAtTheEnd: Int) {
     buffer.array()
   }
 
-  def addRecord(recordLength: Int): PageHeader = {
-    this.copy(spareBytesAtTheEnd = spareBytesAtTheEnd - recordLength)
+  def addDataBytes(dataLength: Int): PageHeader = {
+    this.copy(spareBytesAtTheEnd = spareBytesAtTheEnd - dataLength)
   }
 
 }

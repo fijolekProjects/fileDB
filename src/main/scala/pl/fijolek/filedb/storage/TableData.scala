@@ -12,17 +12,17 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
   }
 
   def readRecords(page: Page): List[Record] = {
-    val recordsInBuffer = page.recordBytes.length / recordSize
+    val recordsInBuffer = page.dataBytes.length / recordSize
     (0 until recordsInBuffer).flatMap { index =>
-      val record = readRecord(page.recordBytes, index)
+      val record = readRecord(page.dataBytes, index)
       record
     }.toList
   }
 
   def prepareDelete(record: Record, page: Page): Page = {
-    val recordsInBuffer = page.recordBytes.length / recordSize
+    val recordsInBuffer = page.dataBytes.length / recordSize
     val deleteBufferOffsets = (0 until recordsInBuffer).flatMap { index =>
-      val recordRead = readRecord(page.recordBytes, index)
+      val recordRead = readRecord(page.dataBytes, index)
       recordRead.flatMap { rec =>
         if (rec == record) {
           val currentOffset = index * recordSize

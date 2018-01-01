@@ -69,11 +69,10 @@ case class DiskBasedBPlusTree(root: RefIdNode[RootNodeAbstract],
 
   //actual modifications here
   private def modifyTree(growTreeResult: GrowTreeResult): Unit = {
-    val rootPage = nodeToPage(growTreeResult.root.node, growTreeResult.root.refId, fileId)
-    val treePages = growTreeResult.changedNodes.map { case (refId, node) =>
+    val treePages = growTreeResult.allChangedNodes.map { case (refId, node) =>
       nodeToPage(node, refId, fileId)
     }
-    (List(rootPage) ++ treePages).foreach { page =>
+    treePages.foreach { page =>
       pageIO.writePage(page)
     }
   }
@@ -133,8 +132,12 @@ object BPlusTree {
   case class RefIdNode[N <: Node](refId: RefId, node: N)
   case class RefNode[N <: Node](ref: Ref, node: N)
 
-  //TODO when root changes should it be in changedNodes?
-  case class GrowTreeResult(root: RefIdNode[RootNodeAbstract], changedNodes: Map[RefId, InnerNode], lastRefId: RefId)
+  case class GrowTreeResult(root: RefIdNode[RootNodeAbstract], rootChanged: Boolean, changedNodes: Map[RefId, InnerNode], lastRefId: RefId) {
+    val allChangedNodes = {
+      val changedRoot = if (rootChanged) Some((root.refId, root.node)) else None
+      changedRoot.toMap ++ changedNodes
+    }
+  }
 
   case class SplitResult(keyToPromote: Long, leftNode: RefIdNode[InnerNode], rightNode: RefIdNode[InnerNode], newNodesCount: Int) {
     def key(n: InnerNode) = n match {
@@ -145,7 +148,7 @@ object BPlusTree {
     val nodeIdPairs = Map((leftNode.refId, leftNode.node), (rightNode.refId, rightNode.node))
   }
 
-  def searchWithRef(root: RootNodeAbstract, key: Long)(findById: RefId => InnerNode): (Option[Record], Ref, List[RefNode[ParentNode]])  = {
+  def searchWithRef(root: RootNodeAbstract, key: Long)(findById: RefId => InnerNode): (Option[Record], Ref, List[RefNode[ParentNode]]) = {
 
     @tailrec
     def findLeaf(key: Long, keys: List[Long], refs: List[Ref], parents: List[RefNode[ParentNode]]): (Option[Record], Ref, List[RefNode[ParentNode]]) = {
@@ -190,15 +193,21 @@ object BPlusTree {
           val newParent = parentNode.withValues(keys = newKeys, refs = newRefs)
           innerGrowTree(root, RefIdNode(parentRef.internalId, newParent), otherParents, newNodes ++ splitResult.nodeIdPairs, currentLastRefId + splitResult.newNodesCount)
         } else {
-          GrowTreeResult(root, newNodes ++ Map(currentNode.refId -> innerNode), currentLastRefId)
+          GrowTreeResult(root = root, changedNodes = newNodes ++ Map(currentNode.refId -> innerNode), rootChanged = false, lastRefId = currentLastRefId)
         }
       case r: RootNodeAbstract =>
         if (r.size == degree) {
           val rootSplitResult = split(currentNode, currentLastRefId)
           val newRoot = Root(keys = List(rootSplitResult.keyToPromote), refs = rootSplitResult.newRefs, degree = degree)
-          innerGrowTree(root, RefIdNode(RootRef.internalId, newRoot), List.empty, newNodes ++ rootSplitResult.nodeIdPairs, currentLastRefId + rootSplitResult.newNodesCount)
+          GrowTreeResult(
+            root = root.copy(node = newRoot),
+            changedNodes = newNodes ++ rootSplitResult.nodeIdPairs,
+            rootChanged = true,
+            lastRefId = currentLastRefId + rootSplitResult.newNodesCount
+          )
         } else {
-          GrowTreeResult(root.copy(node = r), changedNodes = newNodes, currentLastRefId)
+          val newRoot = root.copy(node = r)
+          GrowTreeResult(root = newRoot, changedNodes = newNodes, rootChanged = root != newRoot, lastRefId = currentLastRefId)
         }
     }
   }

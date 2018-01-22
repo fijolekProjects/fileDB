@@ -36,7 +36,7 @@ class DiskBasedBPlusTreeTest extends FeatureSpec with Matchers with BeforeAndAft
 
   feature("disk based b plus tree") {
     scenario("should insert/search on tree with size < degree") {
-      DiskBasedBPlusTree(degree = 4, pageIO = pageIO, fileId = indexFileId)
+      DiskBasedBPlusTree[Long](degree = 4, pageIO = pageIO, fileId = indexFileId)
         .insert(Record(9, 9))
         .insert(Record(16, 16))
       val node = BPlusTreeProtocol.pageToNode(pageIO.read(PageId(10, 0)))
@@ -44,7 +44,7 @@ class DiskBasedBPlusTreeTest extends FeatureSpec with Matchers with BeforeAndAft
       node shouldBe SingleNodeTree(4, List(Record(9, 9), Record(16, 16)))
     }
     scenario("should insert/search on tree with size == degree") {
-      DiskBasedBPlusTree(degree = 4, pageIO = pageIO, fileId = indexFileId)
+      DiskBasedBPlusTree[Long](degree = 4, pageIO = pageIO, fileId = indexFileId)
         .insert(Record(9, 9))
         .insert(Record(16, 16))
         .insert(Record(2, 2))
@@ -60,7 +60,7 @@ class DiskBasedBPlusTreeTest extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("should insert/search on tree with size > degree #1") {
-      DiskBasedBPlusTree(degree = 4, pageIO = pageIO, fileId = indexFileId)
+      DiskBasedBPlusTree[Long](degree = 4, pageIO = pageIO, fileId = indexFileId)
         .insert(Record(9, 9))
         .insert(Record(16, 16))
         .insert(Record(2, 2))
@@ -78,7 +78,7 @@ class DiskBasedBPlusTreeTest extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("should insert/search on tree with size > degree #2") {
-      DiskBasedBPlusTree(degree = 4, pageIO = pageIO, fileId = indexFileId)
+      DiskBasedBPlusTree[Long](degree = 4, pageIO = pageIO, fileId = indexFileId)
         .insert(Record(9, 9))
         .insert(Record(16, 16))
         .insert(Record(2, 2))
@@ -98,7 +98,7 @@ class DiskBasedBPlusTreeTest extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("should insert/search on tree with single level internal nodes") {
-      DiskBasedBPlusTree(degree = 3, pageIO = pageIO, fileId = indexFileId)
+      DiskBasedBPlusTree[Long](degree = 3, pageIO = pageIO, fileId = indexFileId)
         .insert(Record(1, 1))
         .insert(Record(2, 2))
         .insert(Record(3, 3))
@@ -124,7 +124,7 @@ class DiskBasedBPlusTreeTest extends FeatureSpec with Matchers with BeforeAndAft
     }
 
     scenario("should insert/search on tree with dual level internal nodes") {
-      DiskBasedBPlusTree(degree = 3, pageIO = pageIO, fileId = indexFileId)
+      DiskBasedBPlusTree[Long](degree = 3, pageIO = pageIO, fileId = indexFileId)
         .insert(Record(1, 1))
         .insert(Record(2, 2))
         .insert(Record(3, 3))
@@ -180,7 +180,7 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
   feature("b plus tree") {
     scenario("should insert/search on tree with size < degree") {
       val tree =
-        InMemoryBPlusTree(degree = 4)
+        InMemoryBPlusTree[Long](degree = 4)
           .insert(Record(9, 9))
           .insert(Record(16, 16))
 
@@ -192,7 +192,7 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
 
     scenario("should insert/search on tree with size == degree") {
       val tree =
-        InMemoryBPlusTree(degree = 4)
+        InMemoryBPlusTree[Long](degree = 4)
           .insert(Record(9, 9))
           .insert(Record(16, 16))
           .insert(Record(2, 2))
@@ -209,7 +209,7 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
 
     scenario("should insert/search on tree with size > degree #1") {
       val baseTree =
-        InMemoryBPlusTree(degree = 4)
+        InMemoryBPlusTree[Long](degree = 4)
           .insert(Record(9, 9))
           .insert(Record(16, 16))
           .insert(Record(2, 2))
@@ -231,7 +231,7 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
 
     scenario("should insert/search on tree with size > degree #2") {
       val baseTree =
-        InMemoryBPlusTree(degree = 4)
+        InMemoryBPlusTree[Long](degree = 4)
           .insert(Record(9, 9))
           .insert(Record(16, 16))
           .insert(Record(2, 2))
@@ -252,7 +252,7 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
     }
 
     scenario("should insert/search on tree with single level internal nodes") {
-      val baseTree = InMemoryBPlusTree(degree = 3)
+      val baseTree = InMemoryBPlusTree[Long](degree = 3)
         .insert(Record(1, 1))
         .insert(Record(2, 2))
         .insert(Record(3, 3))
@@ -272,7 +272,7 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
     }
 
     scenario("should insert/search on tree with dual level internal nodes") {
-      val baseTree = InMemoryBPlusTree(degree = 3)
+      val baseTree = InMemoryBPlusTree[Long](degree = 3)
         .insert(Record(1, 1))
         .insert(Record(2, 2))
         .insert(Record(3, 3))

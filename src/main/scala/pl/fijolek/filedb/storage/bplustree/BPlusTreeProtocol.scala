@@ -1,15 +1,18 @@
 package pl.fijolek.filedb.storage.bplustree
 
+import com.github.ghik.silencer.silent
 import pl.fijolek.filedb.storage.bplustree.BPlusTree.RefId
 import pl.fijolek.filedb.storage.{DbConstants, Page}
 
+@silent
 object BPlusTreeProtocol {
 
   import java.nio.ByteBuffer
 
-  def recordToBytes(r: Record): Array[Byte] = {
-    ByteBuffer.allocate(2 * java.lang.Long.BYTES)
-      .putLong(r.key)
+  def recordToBytes[K](r: Record): Array[Byte] = {
+    val initBuffer = ByteBuffer.allocate(r.recordKey.byteMarshallable[K].byteSize + java.lang.Long.BYTES)
+    r.recordKey.byteMarshallable[K]
+      .toBytes(initBuffer)
       .putLong(r.value)
       .array()
   }
@@ -26,22 +29,25 @@ object BPlusTreeProtocol {
     Ref(key, internalId)
   }
 
-  def bytesToKey(b: ByteBuffer): Long = {
-    val key = b.getLong()
-    key
+  def bytesToKey(b: ByteBuffer): RecordKey = {
+//    val key = b.getLong()
+//    key
+    ???
   }
 
-  def keyToBytes(key: Long): Array[Byte] = {
-    ByteBuffer.allocate(java.lang.Long.BYTES)
-      .putLong(key)
-      .array()
+  def keyToBytes(key: RecordKey): Array[Byte] = {
+    ???
+//    ByteBuffer.allocate(java.lang.Long.BYTES)
+//      .putLong(key)
+//      .array()
   }
 
   def refToBytes(ref: Ref): Array[Byte] = {
-    ByteBuffer.allocate(2 * java.lang.Long.BYTES)
-      .putLong(ref.key)
-      .putLong(ref.internalId)
-      .array()
+    ???
+//    ByteBuffer.allocate(2 * java.lang.Long.BYTES)
+//      .putLong(ref.key)
+//      .putLong(ref.internalId)
+//      .array()
   }
 
   def nodeTypeToChar(n: Node): Char = {

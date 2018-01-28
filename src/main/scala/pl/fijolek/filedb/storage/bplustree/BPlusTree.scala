@@ -214,16 +214,12 @@ object BPlusTree {
 
   private def split(node: RefIdNode[Node], currentRefId: RefId): SplitResult = {
     def splitRecords(records: List[Record], allocateSpaceForBothNewNodes: Boolean): SplitResult = {
-      val (leftRecords, rightRecords) = records.splitInHalves
+      val (medianRecord, (leftRecords, rightRecords)) = extractMedianAndSplitInHalves(records)
       val (leftRefId, rightRefId) = (currentRefId + 1, if (allocateSpaceForBothNewNodes) currentRefId + 2 else node.refId)
-      val keyToPromote = rightRecords.head.key
-      SplitResult(keyToPromote, RefIdNode(leftRefId, Leaf(leftRecords)), RefIdNode(rightRefId, Leaf(rightRecords)), if (allocateSpaceForBothNewNodes) 2 else 1)
+      SplitResult(medianRecord.key, RefIdNode(leftRefId, Leaf(leftRecords)), RefIdNode(rightRefId, Leaf(medianRecord :: rightRecords)), if (allocateSpaceForBothNewNodes) 2 else 1)
     }
     def splitKeyRefs(keys: List[Long], refs: List[Ref], allocateSpaceForBothNewNodes: Boolean): SplitResult = {
-      val medianKeyIndex = keys.size / 2
-      val medianKey = keys(medianKeyIndex)
-      val keysWithoutMedianValue = keys.zipWithIndex.filter(_._2 != medianKeyIndex).map(_._1)
-      val (leftKeys, rightKeys) = keysWithoutMedianValue.splitInHalves
+      val (medianKey, (leftKeys, rightKeys)) = extractMedianAndSplitInHalves(keys)
       val (leftRefs, rightRefs) = refs.partition(_.key < medianKey)
       val (leftRefId, rightRefId) = (currentRefId + 1, if (allocateSpaceForBothNewNodes) currentRefId + 2 else node.refId)
       SplitResult(medianKey, RefIdNode(leftRefId, Internal(leftKeys, leftRefs)), RefIdNode(rightRefId, Internal(rightKeys, rightRefs)), if (allocateSpaceForBothNewNodes) 2 else 1)
@@ -240,6 +236,13 @@ object BPlusTree {
     }
   }
 
+  private def extractMedianAndSplitInHalves[T](records: List[T]): (T, (List[T], List[T])) = {
+    val medianKeyIndex = records.size / 2
+    val medianKey = records(medianKeyIndex)
+    val keysWithoutMedianValue = records.zipWithIndex.filter(_._2 != medianKeyIndex).map(_._1)
+    val (leftRecords, rightRecords) = keysWithoutMedianValue.splitInHalves
+    (medianKey, (leftRecords, rightRecords))
+  }
 }
 
 sealed trait Node {
@@ -353,7 +356,8 @@ object CollectionImplicits {
 
     def splitInHalves: (Repr, Repr) = {
       val size = xs.size
-      val (left, right) = (xs.take(size / 2), xs.drop(size / 2))
+      val leftSize = Math.ceil((BigDecimal(size)/2).doubleValue()).toInt
+      val (left, right) = (xs.take(leftSize), xs.drop(leftSize))
       (left, right)
     }
   }

@@ -298,6 +298,34 @@ class InMemoryBPlusTreeTest extends FeatureSpec with Matchers {
       tree.search(9) shouldBe Some(Record(9, 9))
     }
 
+    scenario("should insert/search on tree with dual level internal nodes with even degree") {
+      val baseTree = InMemoryBPlusTree(degree = 4)
+        .insert(Record(1, 1))
+        .insert(Record(2, 2))
+        .insert(Record(3, 3))
+        .insert(Record(4, 4))
+        .insert(Record(5, 5))
+        .insert(Record(6, 6))
+        .insert(Record(7, 7))
+        .insert(Record(8, 8))
+        .insert(Record(9, 9))
+
+      val tree = baseTree
+        .insert(Record(10, 10))
+
+      println(tree.prettyPrint())
+      tree.root.node.asInstanceOf[Root].keys shouldBe List(7)
+      tree.search(1) shouldBe Some(Record(1, 1))
+      tree.search(2) shouldBe Some(Record(2, 2))
+      tree.search(3) shouldBe Some(Record(3, 3))
+      tree.search(4) shouldBe Some(Record(4, 4))
+      tree.search(5) shouldBe Some(Record(5, 5))
+      tree.search(6) shouldBe Some(Record(6, 6))
+      tree.search(7) shouldBe Some(Record(7, 7))
+      tree.search(8) shouldBe Some(Record(8, 8))
+      tree.search(9) shouldBe Some(Record(9, 9))
+      tree.search(10) shouldBe Some(Record(10, 10))
+    }
 
   }
 }

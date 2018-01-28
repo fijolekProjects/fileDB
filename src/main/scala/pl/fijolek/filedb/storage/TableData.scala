@@ -2,7 +2,7 @@ package pl.fijolek.filedb.storage
 
 import java.util
 
-case class TableData(name: String, columnsDefinition: List[Column]) {
+case class TableData(name: String, columnsDefinition: List[Column], indices: List[Index] = List.empty) {
   val recordSize: Int = {
     columnsDefinition.map(_.typ.sizeInBytes).sum
   }
@@ -41,3 +41,5 @@ case class TableData(name: String, columnsDefinition: List[Column]) {
   }
 
 }
+
+case class Index(column: String)

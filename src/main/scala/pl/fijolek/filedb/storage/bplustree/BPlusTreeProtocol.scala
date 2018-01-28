@@ -7,44 +7,44 @@ object BPlusTreeProtocol {
 
   import java.nio.ByteBuffer
 
-  def recordToBytes(r: Record): Array[Byte] = {
+  private def recordToBytes(r: Record): Array[Byte] = {
     ByteBuffer.allocate(2 * java.lang.Long.BYTES)
       .putLong(r.key)
       .putLong(r.value)
       .array()
   }
 
-  def bytesToRecord(b: ByteBuffer): Record = {
+  private def bytesToRecord(b: ByteBuffer): Record = {
     val key = b.getLong()
     val value = b.getLong()
     Record(key, value)
   }
 
-  def bytesToRef(b: ByteBuffer): Ref = {
+  private def bytesToRef(b: ByteBuffer): Ref = {
     val key = b.getLong()
     val internalId = b.getLong()
     Ref(key, internalId)
   }
 
-  def bytesToKey(b: ByteBuffer): Long = {
+  private def bytesToKey(b: ByteBuffer): Long = {
     val key = b.getLong()
     key
   }
 
-  def keyToBytes(key: Long): Array[Byte] = {
+  private def keyToBytes(key: Long): Array[Byte] = {
     ByteBuffer.allocate(java.lang.Long.BYTES)
       .putLong(key)
       .array()
   }
 
-  def refToBytes(ref: Ref): Array[Byte] = {
+  private def refToBytes(ref: Ref): Array[Byte] = {
     ByteBuffer.allocate(2 * java.lang.Long.BYTES)
       .putLong(ref.key)
       .putLong(ref.internalId)
       .array()
   }
 
-  def nodeTypeToChar(n: Node): Char = {
+  private def nodeTypeToChar(n: Node): Char = {
     val c = n match {
       case _: SingleNodeTree =>
         's'
@@ -58,7 +58,7 @@ object BPlusTreeProtocol {
     c
   }
 
-  def charTyNodeType(c: Char): String = {
+  private def charTyNodeType(c: Char): String = {
     c match {
       case 's' =>
         SingleNodeTree.getClass.getSimpleName.init
@@ -114,6 +114,10 @@ object BPlusTreeProtocol {
           .array()
     }
     page.add(bytesToWrite)
+  }
+
+  def pageToRoot(page: Page): RootNodeAbstract = {
+    pageToNode(page).asInstanceOf[RootNodeAbstract]
   }
 
   def pageToNode(page: Page): Node = {

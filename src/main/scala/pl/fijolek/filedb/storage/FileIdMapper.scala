@@ -32,7 +32,7 @@ class FileIdMapper(basePath: String) {
     fileIdToPath
   }
 
-  def maxFileId = {
+  def maxFileId: Long = {
     val files = readRecords(fileTable, Paths.get(basePath, fileTable.name).toFile.getAbsolutePath)
     val ids = files.map { record =>
       val id = record.values.find(_.column.name == "id").get.value.asInstanceOf[Long]

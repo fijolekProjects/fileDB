@@ -23,6 +23,16 @@ object DiskBasedBPlusTree {
     )
   }
 
+  def apply(rootNodeAbstract: RootNodeAbstract, pageIO: PageIO, fileId: Long): DiskBasedBPlusTree = {
+    new DiskBasedBPlusTree(
+      RefIdNode(RootRef.internalId, rootNodeAbstract),
+      pageIO,
+      pageToNode _,
+      fileId
+    )
+  }
+
+
 }
 
 //TODO unify DiskBasedBPlusTree and InMemoryBPlusTree
@@ -31,6 +41,12 @@ case class DiskBasedBPlusTree(root: RefIdNode[RootNodeAbstract],
                               pageToNode: Page => Node,
                               fileId: Long
                              ) {
+
+  def insert(records: List[Record]): DiskBasedBPlusTree = {
+    records.foldLeft(this) { case (newTree, record) =>
+      newTree.insert(record)
+    }
+  }
 
   def insert(record: Record): DiskBasedBPlusTree = {
     val lastRefId = Math.max(FileUtils.fileSize(pageIO.fileIdMapper.path(fileId)) / DbConstants.pageSize - 1, 0)
@@ -153,7 +169,7 @@ object BPlusTree {
     @tailrec
     def findLeaf(key: Long, keys: List[Long], refs: List[Ref], parents: List[RefNode[ParentNode]]): (Option[Record], Ref, List[RefNode[ParentNode]]) = {
       val refIdx = keys.toIterator.zipWithIndex.find(_._1 > key).map(_._2).getOrElse(keys.size)
-      val ref = refs(refIdx)
+      val ref = refs.lift(refIdx).getOrElse(throw new RuntimeException(s"Unable to find ${refIdx} in $refs, key: $key"))
       findById(ref.internalId) match {
         case Leaf(records) =>
           (records.find(_.key == key), ref, parents)
@@ -286,10 +302,14 @@ case class PrettyTree(root: RootNodeAbstract, internals: List[List[Internal]], l
   override def toString: String = {
     s"""
       |Tree:
+      |root:
       |$root
+      |internals:
       |${internals.mkString("\n")}
+      |leafs:
       |$leafs
-      |nodes: ${TreeMap.apply(nodes.toSeq: _*)}
+      |nodes:
+      |${TreeMap.apply(nodes.toSeq: _*)}
     """.stripMargin
   }
 }
@@ -361,4 +381,17 @@ object CollectionImplicits {
       (left, right)
     }
   }
+
+  implicit class RichTupleList[A, B](l: List[(A, B)]) {
+    def tupleListToMap: Map[A, List[B]] = {
+      l.groupBy(_._1).map { case (k, v) => (k, v.map(_._2))}
+    }
+  }
+
+  implicit class RichMap[A, B](m: Map[A,B]) {
+    def mapValuesNow[C](f: B => C): Map[A, C] = {
+      m.map { case (k, v) => (k, f(v))}
+    }
+  }
+
 }

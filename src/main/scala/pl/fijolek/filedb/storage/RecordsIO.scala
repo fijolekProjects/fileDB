@@ -57,9 +57,9 @@ class RecordsIO(fileIdMapper: FileIdMapper, pageIO: PageIO) {
 
     pagesToWrite.foreach { pageToWrite =>
       pageIO.writePage(pageToWrite.page)
-      pageToWrite.indexRecords.foreach { case (columnName, indexRecords) =>
-        tableData.indices(columnName).insert(indexRecords)
-      }
+    }
+    pagesToWrite.flatMap(_.indexRecords).tupleListToMap.mapValuesNow(_.flatten).foreach { case (columnName, indexRecords) =>
+      tableData.indices(columnName).insert(indexRecords)
     }
     ()
   }

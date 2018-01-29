@@ -220,7 +220,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
       fileManager.searchRecord(instructorTableData.name, "ID", id) shouldBe Some(instructorRecord(id, id.toString))
     }
 
-    ignore("should be able to retrieve key using index with large number of records #2") {
+    scenario("should be able to retrieve key using index with large number of records #2") {
       val records = (1 to 500).toList.map { i =>
         instructorRecord(i.toLong, i.toString)
       }
@@ -232,7 +232,7 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
       fileManager.searchRecord(instructorTableData.name, "ID", id) shouldBe Some(instructorRecord(id, id.toString))
     }
 
-    ignore("should be able to retrieve key using large index") {
+    scenario("should be able to retrieve key using large index") {
       val record = largeInstructorRecord(123, "abc")
       val record2 = largeInstructorRecord(234, "bcd")
       val record3 = largeInstructorRecord(345, "cde")

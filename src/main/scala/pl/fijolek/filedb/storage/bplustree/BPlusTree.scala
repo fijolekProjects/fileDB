@@ -42,6 +42,7 @@ case class DiskBasedBPlusTree(root: RefIdNode[RootNodeAbstract],
                               fileId: Long
                              ) {
 
+  //TODO reflect IO in signature
   def insert(records: List[Record]): DiskBasedBPlusTree = {
     records.foldLeft(this) { case (newTree, record) =>
       newTree.insert(record)

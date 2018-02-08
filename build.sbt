@@ -1,10 +1,16 @@
 addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "0.5")
+enablePlugins(Antlr4Plugin)
+
+resolvers += Resolver.sbtPluginRepo("releases")
 
 name := "fileDB"
 
 version := "0.1"
 
 scalaVersion := "2.12.2"
+
+antlr4Version in Antlr4 := "4.7.1"
+antlr4PackageName in Antlr4 := Some("pl.fijolek.filedb.query.antlr")
 
 libraryDependencies ++= {
   Seq(

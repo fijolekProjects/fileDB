@@ -7,8 +7,10 @@ object SqlAst {
   case class SqlBinaryOperator(operator: SqlOperatorValue, leftOperand: SqlNode, rightOperand: SqlNode) extends SqlOperator
 
   sealed trait SqlNode
-  case class SqlSelect(from: SqlIdentifier, selectList: List[SqlIdentifier], where: Option[SqlBinaryOperator]) extends SqlNode
-  case class SqlIdentifier(name: String) extends SqlNode
+  case class SqlSelect(from: SqlNode, selectList: List[SqlIdentifier], where: Option[SqlBinaryOperator]) extends SqlNode
+  case class SqlIdentifier(name: String) extends SqlNode {
+    def isStar = name == "*"
+  }
 
   sealed trait SqlLiteral extends SqlNode
   case class SqlNumericalLiteral(value: String) extends SqlLiteral
@@ -36,7 +38,9 @@ object SqlAst {
   }
 
   case class Column(name: String, columnType: String)
-  case class CreateTable(name: String, columns: List[Column])
-  case class CreateIndex(name: String, table: String, column: String)
+  sealed trait CreateSql
+  case class CreateTable(name: String, columns: List[Column]) extends CreateSql
+  case class CreateIndex(name: String, table: String, column: String) extends CreateSql
+
   case class InsertInto(table: String, values: Map[String, SqlLiteral])
 }

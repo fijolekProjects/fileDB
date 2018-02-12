@@ -12,6 +12,8 @@ scalaVersion := "2.12.2"
 antlr4Version in Antlr4 := "4.7.1"
 antlr4PackageName in Antlr4 := Some("pl.fijolek.filedb.query.antlr")
 
+parallelExecution in Test := false //due to shared db basePath in tests, let's leave it for now
+
 libraryDependencies ++= {
   Seq(
     "org.scalatest" %% "scalatest" % "3.0.3" % "test",

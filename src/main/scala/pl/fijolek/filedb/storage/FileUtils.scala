@@ -21,14 +21,21 @@ object FileUtils {
   }
 
   def read(filePath: String, offset: Long): Array[Byte] = {
-    val file = new RandomAccessFile(filePath, "rw")
-    try {
+    withFileOpen(filePath) { file =>
       val buffer = new Array[Byte](DbConstants.pageSize)
       file.seek(offset)
       @silent val unused = file.read(buffer)
       buffer
-    } finally {
-      file.close()
+    }
+  }
+
+  case class ReadPageResult(page: Page, eofReached: Boolean, currentOffset: Long)
+  def readExtended(filePath: String, offset: Long): ReadPageResult = {
+    withFileOpen(filePath) { file =>
+      val buffer = new Array[Byte](DbConstants.pageSize)
+      file.seek(offset)
+      val bytesRead = file.read(buffer)
+      ReadPageResult(Page.apply(buffer), bytesRead == -1, offset + DbConstants.pageSize)
     }
   }
 

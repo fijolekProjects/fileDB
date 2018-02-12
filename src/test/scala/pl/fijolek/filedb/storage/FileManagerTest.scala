@@ -1,54 +1,21 @@
 package pl.fijolek.filedb.storage
 
-import java.nio.file.{Files, Paths}
-
 import org.scalatest.{BeforeAndAfterEach, FeatureSpec, Matchers}
 import pl.fijolek.filedb.storage.ColumnTypes.Varchar
-import com.github.ghik.silencer.silent
+import pl.fijolek.filedb.storage.TestFactory._
+import pl.fijolek.filedb.storage.TestData._
 
 class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
-  val basePath = "/tmp/filedb"
-  val fileIdMapper = new FileIdMapper(basePath)
-  val pageIO = new PageIO(fileIdMapper)
-  val recordsIO = new RecordsIO(fileIdMapper, pageIO)
-  val systemCatalogManager = new SystemCatalogManager(basePath, recordsIO, fileIdMapper, pageIO)
-  val fileManager = new FileManager(systemCatalogManager, recordsIO)
-
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    cleanTables()
+    cleanAllTables(List(instructorTableData.name))
     systemCatalogManager.init()
   }
   override protected def afterEach(): Unit = {
     super.afterEach()
-    cleanTables()
+    cleanAllTables(List(instructorTableData.name))
   }
-
-  @silent
-  private def cleanTables(): Unit = {
-    Files.deleteIfExists(Paths.get(basePath, "instructor"))
-    Files.deleteIfExists(Paths.get(basePath, "file"))
-    Files.deleteIfExists(Paths.get(basePath, "table"))
-    Files.deleteIfExists(Paths.get(basePath, "column"))
-    Files.deleteIfExists(Paths.get(basePath, "index"))
-  }
-
-  val instructorTableData = TableData(
-    name = "instructor",
-    columnsDefinition = List(
-      Column("ID", ColumnTypes.BigInt),
-      Column("name", ColumnTypes.Varchar(20))
-    )
-  )
-
-  val largeInstructorTableData = TableData(
-    name = "instructor",
-    columnsDefinition = List(
-      Column("ID", ColumnTypes.BigInt),
-      Column("name", ColumnTypes.Varchar(2000))
-    )
-  )
 
   val internalFileRecords = List(
     Record(List(Value(Column("id", ColumnTypes.BigInt), -1), Value(Column("filePath", Varchar(100)), "/tmp/filedb/file"))),
@@ -243,20 +210,5 @@ class FileManagerTest extends FeatureSpec with Matchers with BeforeAndAfterEach 
       fileManager.searchRecord(largeInstructorTableData.name, "ID", 123L) shouldBe Some(record)
     }
   }
-
-  def instructorRecord(id: Long, name: String): Record = {
-    Record(List(
-      Value(Column("ID", ColumnTypes.BigInt), id),
-      Value(Column("name", ColumnTypes.Varchar(20)), name)
-    ))
-  }
-
-  def largeInstructorRecord(id: Long, name: String): Record = {
-    Record(List(
-      Value(Column("ID", ColumnTypes.BigInt), id),
-      Value(Column("name", ColumnTypes.Varchar(2000)), name)
-    ))
-  }
-
 
 }

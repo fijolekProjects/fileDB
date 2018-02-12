@@ -188,7 +188,7 @@ class SystemCatalogManager(val basePath: String, recordsIO: RecordsIO, fileIdMap
   }
 
   private def readInternalTable(storedTableData: StoredTableData): List[Record] = {
-    recordsIO.readRecords(storedTableData)
+    recordsIO.readRecords(storedTableData).toList
   }
 
   private def filePath(tableData: TableData): File = {
@@ -202,7 +202,8 @@ class SystemCatalogManager(val basePath: String, recordsIO: RecordsIO, fileIdMap
 }
 
 case class SystemCatalog(tables: List[StoredTableData]) {
-  val tablesByName = tables.map(table => (table.data.name, table)).toMap
+  private val tablesByName = tables.map(table => (table.data.name.toUpperCase, table)).toMap
+  def table(name: String) = tablesByName(name.toUpperCase)
 }
 
 case class StoredTableData(data: TableData, fileId: Long, indices: Map[String, DiskBasedBPlusTree])

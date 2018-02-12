@@ -95,4 +95,6 @@ object ColumnTypes {
 
 
 //TODO make column type and value type equal
-case class Value(column: Column, value: Any)
+case class Value(column: Column, value: Any) {
+  def belongsToColumn(columnName: String): Boolean = columnName.toUpperCase == column.name.toUpperCase
+}

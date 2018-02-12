@@ -3,19 +3,14 @@ package pl.fijolek.filedb.storage
 import pl.fijolek.filedb.storage.bplustree.DiskBasedBPlusTree
 import pl.fijolek.filedb.storage.bplustree.CollectionImplicits._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 class RecordsIO(fileIdMapper: FileIdMapper, pageIO: PageIO) {
 
-  def readRecords(storedTableData: StoredTableData): List[Record] = {
+  def readRecords(storedTableData: StoredTableData): Stream[Record] = {
     val tableData = storedTableData.data
-    val records = new ArrayBuffer[Record]()
     val filePath = fileIdMapper.path(storedTableData.fileId)
-    FileUtils.traverse(filePath) { page =>
-      val recordsRead = tableData.readRecords(page)
-      records ++= recordsRead
-    }
-    records.toList
+    new RecordIterator(filePath, tableData).toStream
   }
 
   def readPageRecords(storedTableData: StoredTableData, pageId: PageId): List[Record] = {
@@ -87,4 +82,29 @@ class RecordsIO(fileIdMapper: FileIdMapper, pageIO: PageIO) {
 
   type ColumnName = String
   case class PageToWrite(page: Page, indexRecords: Map[ColumnName, List[bplustree.Record]])
+
+  private class RecordIterator(filePath: String, tableData: TableData) extends Iterator[Record] {
+    private var currentOffset = 0L
+    private var eofReached = false
+    private val buffer = mutable.Queue.empty[Record]
+    fetch()
+
+    override def hasNext: Boolean = buffer.nonEmpty
+
+    override def next(): Record = {
+      if (!eofReached) {
+        fetch()
+      }
+      buffer.dequeue()
+    }
+
+    private def fetch() = {
+      val result = FileUtils.readExtended(filePath, currentOffset)
+      val records = tableData.readRecords(result.page)
+      buffer.enqueue(records: _*)
+      currentOffset = result.currentOffset
+      eofReached = result.eofReached
+    }
+  }
+
 }

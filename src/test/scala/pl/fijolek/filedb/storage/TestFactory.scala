@@ -12,7 +12,8 @@ object TestFactory {
 
   def cleanAllTables(userTables: List[String], path: String = basePath): Unit = {
     userTables.foreach { name =>
-      Files.deleteIfExists(Paths.get(path, name))
+      Files.deleteIfExists(Paths.get(path, name.toLowerCase))
+      Files.deleteIfExists(Paths.get(path, name.toUpperCase))
     }
     Files.deleteIfExists(Paths.get(path, "file"))
     Files.deleteIfExists(Paths.get(path, "table"))

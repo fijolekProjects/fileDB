@@ -18,43 +18,39 @@ class SqlEvaluatorSpec extends FeatureSpec with Matchers with BeforeAndAfterEach
     cleanAllTables(List(instructorTableData.name))
   }
 
+  val createInstructorTable = "CREATE TABLE INSTRUCTOR(ID BigInt, name Varchar(20))"
+
   feature("sql evaluator") {
     scenario("basic select query") {
-      val record = instructorRecord(123, "abc")
-      val records = List(record)
-      systemCatalogManager.createTable(instructorTableData)
-
-      fileManager.insertRecords(instructorTableData.name, records)
-
       val evaluator = new SqlEvaluator(fileManager)
+      evaluator.evaluateCreateTable(SqlParser.parseCreateTable(createInstructorTable))
+      evaluator.evaluateInsertInto(SqlParser.parseInsertInto("INSERT INTO INSTRUCTOR (ID, NAME) VALUES (123, 'abc')"))
+
       val recordRead = evaluator.evaluateSelect(SqlParser.parseSelect("SELECT * FROM INSTRUCTOR"))
-      recordRead shouldBe records
+
+      recordRead shouldBe List(instructorRecord(123, "abc"))
     }
 
     scenario("basic select with projection") {
-      val record = instructorRecord(123, "abc")
-      val records = List(record)
-      systemCatalogManager.createTable(instructorTableData)
-
-      fileManager.insertRecords(instructorTableData.name, records)
-
       val evaluator = new SqlEvaluator(fileManager)
+      evaluator.evaluateCreateTable(SqlParser.parseCreateTable(createInstructorTable))
+      evaluator.evaluateInsertInto(SqlParser.parseInsertInto("INSERT INTO INSTRUCTOR (ID, NAME) VALUES (123, 'abc')"))
+
       val recordRead = evaluator.evaluateSelect(SqlParser.parseSelect("SELECT NAME FROM INSTRUCTOR"))
+
       recordRead shouldBe List(nameRecord("abc"))
     }
 
     scenario("basic select query with where clause") {
-      val record = instructorRecord(123, "abc")
-      val record2 = instructorRecord(234, "bcd")
-      val record3 = instructorRecord(345, "cde")
-      val records = List(record, record2, record3)
-      systemCatalogManager.createTable(instructorTableData)
-
-      fileManager.insertRecords(instructorTableData.name, records)
-
       val evaluator = new SqlEvaluator(fileManager)
+      evaluator.evaluateCreateTable(SqlParser.parseCreateTable(createInstructorTable))
+      evaluator.evaluateInsertInto(SqlParser.parseInsertInto("INSERT INTO INSTRUCTOR (ID, NAME) VALUES (123, 'abc')"))
+      evaluator.evaluateInsertInto(SqlParser.parseInsertInto("INSERT INTO INSTRUCTOR (ID, NAME) VALUES (234, 'bcd')"))
+      evaluator.evaluateInsertInto(SqlParser.parseInsertInto("INSERT INTO INSTRUCTOR (ID, NAME) VALUES (345, 'cde')"))
+
       val recordRead = evaluator.evaluateSelect(SqlParser.parseSelect("SELECT * FROM INSTRUCTOR WHERE NAME = 'bcd'"))
-      recordRead shouldBe List(record2)
+
+      recordRead shouldBe List(instructorRecord(234, "bcd"))
     }
 
   }

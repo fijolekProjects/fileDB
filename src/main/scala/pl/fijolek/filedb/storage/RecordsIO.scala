@@ -98,7 +98,7 @@ class RecordsIO(fileIdMapper: FileIdMapper, pageIO: PageIO) {
       buffer.dequeue()
     }
 
-    private def fetch() = {
+    private def fetch(): Unit = {
       val result = FileUtils.readExtended(filePath, currentOffset)
       val records = tableData.readRecords(result.page)
       buffer.enqueue(records: _*)

@@ -8,7 +8,11 @@ case class TableData(name: String, columnsDefinition: List[Column], indices: Lis
   }
 
   def column(columnName: String): Column = {
-    columnsDefinition.find(_.name == columnName).get
+    columnsDefinition.find(_.name.toUpperCase == columnName.toUpperCase).get
+  }
+
+  def columnsEqual(columnNames: List[String]): Boolean = {
+    columnsDefinition.map(_.name.toLowerCase).toSet == columnNames.map(_.toLowerCase).toSet
   }
 
   def readRecords(page: Page): List[Record] = {

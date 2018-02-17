@@ -13,12 +13,12 @@ object SqlAst {
   }
 
   sealed trait SqlLiteral extends SqlNode
-  case class SqlNumericalLiteral(value: String) extends SqlLiteral
+  case class SqlBigIntLiteral(value: Long) extends SqlLiteral {}
   case class SqlStringLiteral(value: String) extends SqlLiteral
   object SqlLiteral {
     def fromString(s: String): SqlLiteral = {
-      if (Try(BigDecimal.apply(s)).isSuccess) {
-        SqlNumericalLiteral(s)
+      if (Try(s.toLong).isSuccess) {
+        SqlBigIntLiteral(s.toLong)
       } else {
         SqlStringLiteral(s.replaceAll("'", ""))
       }
@@ -42,5 +42,9 @@ object SqlAst {
   case class CreateTable(name: String, columns: List[Column]) extends CreateSql
   case class CreateIndex(name: String, table: String, column: String) extends CreateSql
 
-  case class InsertInto(table: String, values: Map[String, SqlLiteral])
+  case class InsertInto(table: String, values: Map[String, SqlLiteral]) {
+    def columnValue(column: String): SqlLiteral = {
+      values.getOrElse(column.toUpperCase, values(column.toLowerCase))
+    }
+  }
 }

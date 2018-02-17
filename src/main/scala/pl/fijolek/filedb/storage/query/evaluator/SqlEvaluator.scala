@@ -1,9 +1,31 @@
 package pl.fijolek.filedb.storage.query.evaluator
 
-import pl.fijolek.filedb.storage.{FileManager, Record, Value}
+import pl.fijolek.filedb._
+import pl.fijolek.filedb.storage.{FileManager, Record, TableData, Value}
 import pl.fijolek.filedb.storage.query.parser.SqlAst._
 
 class SqlEvaluator(fileManager: FileManager) {
+
+  def evaluateCreateTable(createTable: CreateTable): Unit = {
+    val columns = createTable.columns.map { col =>
+      storage.Column(col.name, storage.ColumnTypes.ColumnType.fromString(col.columnType))
+    }
+    fileManager.createTable(TableData(createTable.name, columns, indices = List.empty))
+  }
+
+  def evaluateInsertInto(insertInto: InsertInto): Unit = {
+    val tableData = fileManager.readTable(insertInto.table)
+    assert(tableData.data.columnsEqual(insertInto.values.keys.toList))
+    val values = tableData.data.columnsDefinition.map { columnDef =>
+      val value = insertInto.columnValue(columnDef.name) match {
+        case SqlStringLiteral(str) => str
+        case SqlBigIntLiteral(long) => long
+      }
+      Value(columnDef, value)
+    }
+    val record = Record(values)
+    fileManager.insertRecords(tableData.data.name, List(record))
+  }
 
   def evaluateSelect(sqlSelect: SqlSelect): Stream[Record] = {
     val result = sqlSelect.from match {
@@ -23,7 +45,7 @@ class SqlEvaluator(fileManager: FileManager) {
               true
           }
         }
-      case _: SqlNumericalLiteral | _: SqlStringLiteral | _: SqlSelect =>
+      case _: SqlBigIntLiteral | _: SqlStringLiteral | _: SqlSelect =>
         ???
     }
     result.map(rec => rec.copy(values = projection(sqlSelect.selectList, rec.values)))
@@ -31,7 +53,7 @@ class SqlEvaluator(fileManager: FileManager) {
 
   private def evalNode(node: SqlNode, r: Record): Any = {
     node match {
-      case SqlNumericalLiteral(value) =>
+      case SqlBigIntLiteral(value) =>
         BigDecimal.apply(value)
       case SqlStringLiteral(value) =>
         value

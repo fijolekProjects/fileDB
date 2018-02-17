@@ -25,7 +25,7 @@ class SqlParserTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
       val insertResult = SqlParser.parseInsertInto("INSERT INTO INSTRUCTOR (ID, NAME) VALUES (1, 'foo')")
 
       insertResult.table shouldBe "INSTRUCTOR"
-      insertResult.values shouldBe Map("ID" -> SqlNumericalLiteral("1"), "NAME" -> SqlStringLiteral("foo"))
+      insertResult.values shouldBe Map("ID" -> SqlBigIntLiteral(1), "NAME" -> SqlStringLiteral("foo"))
     }
 
     scenario("basic select") {
@@ -41,7 +41,7 @@ class SqlParserTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
       selectResult.selectList shouldBe List(SqlIdentifier("*"))
       selectResult.from shouldBe SqlIdentifier("FOO")
-      selectResult.where shouldBe Some(SqlBinaryOperator(EqualsOperatorValue, SqlIdentifier("BAR"), SqlNumericalLiteral("3")))
+      selectResult.where shouldBe Some(SqlBinaryOperator(EqualsOperatorValue, SqlIdentifier("BAR"), SqlBigIntLiteral(3)))
     }
 
   }

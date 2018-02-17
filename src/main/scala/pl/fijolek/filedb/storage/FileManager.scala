@@ -34,4 +34,12 @@ class FileManager(systemCatalogManager: SystemCatalogManager, recordsIO: Records
     recordsIO.delete(storedTableData, record)
   }
 
+  def createTable(tableData: TableData): Unit = {
+    systemCatalogManager.createTable(tableData)
+  }
+
+  def readTable(tableName: String): StoredTableData = {
+    systemCatalogManager.readCatalog.table(tableName)
+  }
+
 }

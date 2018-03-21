@@ -3,17 +3,15 @@ package pl.fijolek.filedb.storage.query.parser
 import scala.util.Try
 
 object SqlAst {
-  sealed trait SqlOperator
-  case class SqlBinaryOperator(operator: SqlOperatorValue, leftOperand: SqlNode, rightOperand: SqlNode) extends SqlOperator
-
   sealed trait SqlNode
+  case class SqlBinaryOperator(operator: SqlOperatorValue, leftOperand: SqlNode, rightOperand: SqlNode) extends SqlNode
   case class SqlSelect(from: SqlNode, selectList: List[SqlIdentifier], where: Option[SqlBinaryOperator]) extends SqlNode
   case class SqlIdentifier(name: String) extends SqlNode {
     def isStar = name == "*"
   }
 
   sealed trait SqlLiteral extends SqlNode
-  case class SqlBigIntLiteral(value: Long) extends SqlLiteral {}
+  case class SqlBigIntLiteral(value: Long) extends SqlLiteral
   case class SqlStringLiteral(value: String) extends SqlLiteral
   object SqlLiteral {
     def fromString(s: String): SqlLiteral = {
@@ -26,6 +24,7 @@ object SqlAst {
   }
 
   sealed trait SqlOperatorValue
+  case object AndOperatorValue extends SqlOperatorValue
   case object EqualsOperatorValue extends SqlOperatorValue
   case object NotEqualsOperatorValue extends SqlOperatorValue
   object SqlOperatorValue {
@@ -33,6 +32,7 @@ object SqlAst {
       s match {
         case "=" => EqualsOperatorValue
         case "!=" => NotEqualsOperatorValue
+        case "AND" => AndOperatorValue
       }
     }
   }

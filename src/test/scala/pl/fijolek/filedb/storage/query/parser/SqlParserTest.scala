@@ -5,6 +5,8 @@ import pl.fijolek.filedb.storage.query.parser.SqlAst._
 
 class SqlParserTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
+  import WhereTreeBuilder._
+
   feature("query parsing") {
     scenario("create table") {
       val createTableResult = SqlParser.parseCreateTable("CREATE TABLE INSTRUCTOR(ID BigInt, NAME Varchar(2000))")
@@ -41,7 +43,60 @@ class SqlParserTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
 
       selectResult.selectList shouldBe List(SqlIdentifier("*"))
       selectResult.from shouldBe SqlIdentifier("FOO")
-      selectResult.where shouldBe Some(SqlBinaryOperator(EqualsOperatorValue, SqlIdentifier("BAR"), SqlBigIntLiteral(3)))
+      selectResult.where shouldBe Some(
+        EQ("BAR", 3)
+      )
+    }
+
+    scenario("select with where AND clause #1") {
+      val selectResult = SqlParser.parseSelect("SELECT * FROM FOO WHERE BAR = 3 AND ID = 1")
+
+      selectResult.selectList shouldBe List(SqlIdentifier("*"))
+      selectResult.from shouldBe SqlIdentifier("FOO")
+
+      selectResult.where shouldBe Some(
+        AND(EQ("BAR", 3), EQ("ID", 1))
+      )
+    }
+
+    scenario("select with where AND clause #2") {
+      val selectResult = SqlParser.parseSelect("SELECT * FROM FOO WHERE BAR = 3 AND ID = 1 AND BAZ = 4")
+
+      selectResult.selectList shouldBe List(SqlIdentifier("*"))
+      selectResult.from shouldBe SqlIdentifier("FOO")
+      selectResult.where shouldBe Some(
+        AND(
+          AND(EQ("BAR", 3), EQ("ID", 1)),
+          EQ("BAZ", 4)
+        )
+      )
+    }
+
+    scenario("select with where AND clause #3") {
+      val selectResult = SqlParser.parseSelect("SELECT * FROM FOO WHERE BAR = 3 AND ID = 1 AND BAZ = 4 AND QUX = 5")
+
+      selectResult.selectList shouldBe List(SqlIdentifier("*"))
+      selectResult.from shouldBe SqlIdentifier("FOO")
+
+      selectResult.where shouldBe Some(
+        AND(
+          AND(
+            AND(EQ("BAR", 3), EQ("ID", 1)),
+            EQ("BAZ", 4)
+          ),
+          EQ("QUX", 5)
+        )
+      )
+    }
+  }
+
+  object WhereTreeBuilder {
+    def EQ(id: String, literal: Any): SqlBinaryOperator = {
+      SqlBinaryOperator(EqualsOperatorValue, SqlIdentifier(id), SqlLiteral.fromString(literal.toString))
+    }
+
+    def AND(left: SqlBinaryOperator, right: SqlBinaryOperator): SqlBinaryOperator = {
+      SqlBinaryOperator(AndOperatorValue, left, right)
     }
 
   }

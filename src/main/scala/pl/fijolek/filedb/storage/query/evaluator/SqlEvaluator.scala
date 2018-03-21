@@ -40,12 +40,14 @@ class SqlEvaluator(fileManager: FileManager) {
                   left == right
                 case NotEqualsOperatorValue =>
                   left != right
+                case AndOperatorValue =>
+                  ???
               }
             case None =>
               true
           }
         }
-      case _: SqlBigIntLiteral | _: SqlStringLiteral | _: SqlSelect =>
+      case _: SqlBigIntLiteral | _: SqlStringLiteral | _: SqlSelect | _: SqlBinaryOperator =>
         ???
     }
     result.map(rec => rec.copy(values = projection(sqlSelect.selectList, rec.values)))
@@ -61,6 +63,8 @@ class SqlEvaluator(fileManager: FileManager) {
         r.values.find(_.belongsToColumn(columnName)).get.value
       case s: SqlSelect =>
         evaluateSelect(s)
+      case _: SqlBinaryOperator =>
+        ???
     }
   }
 

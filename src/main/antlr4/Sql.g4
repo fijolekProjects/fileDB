@@ -30,6 +30,7 @@ expr
  : literal_value
  | column_name
  | expr ( '=' | '!=') expr
+ | expr K_AND expr
 ;
 
 index_name
@@ -75,6 +76,7 @@ STRING_LITERAL
  : '\'' ( ~'\'' | '\'\'' )* '\''
 ;
 
+K_AND : A N D;
 K_VALUES : V A L U E S;
 K_INSERT : I N S E R T;
 K_INTO : I N T O;

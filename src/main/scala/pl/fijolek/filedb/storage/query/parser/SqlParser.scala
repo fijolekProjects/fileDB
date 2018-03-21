@@ -1,6 +1,6 @@
 package pl.fijolek.filedb.storage.query.parser
 
-import org.antlr.v4.runtime.tree.{ParseTreeWalker, TerminalNode}
+import org.antlr.v4.runtime.tree.ParseTreeWalker
 import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import pl.fijolek.filedb.storage.query.parser.SqlAst._
 
@@ -60,11 +60,11 @@ object SqlParser {
     insertIntoResult
   }
 
-
+  //TODO balance where clause tree?
   def parseSelect(query: String): SqlSelect = {
     var selectResult: SqlSelect = SqlSelect(null, List.empty, None)
-    var lastVisitedNode: Option[TerminalNode] = None
     val selectContext = createParser(query).select()
+    val operators = new java.util.Stack[SqlBinaryOperator]()
 
     ParseTreeWalker.DEFAULT.walk(new antlr.SqlBaseListener() {
 
@@ -78,19 +78,39 @@ object SqlParser {
         selectResult = selectResult.copy(selectList = selectResult.selectList ++ List(colName))
       }
 
-      override def visitTerminal(node: TerminalNode): Unit = {
-        lastVisitedNode = Option(node)
+      override def enterExpr(ctx: antlr.SqlParser.ExprContext): Unit = {
+        println("enter: " + ctx.getText + " children: " + ctx.children.size())
       }
 
-      override def enterExpr(ctx: antlr.SqlParser.ExprContext): Unit = {
-        if (lastVisitedNode.exists(_.getSymbol.getType == antlr.SqlParser.K_WHERE)) {
-          require(ctx.children.size() == 3)
-          val expr = ctx.expr()
+      override def exitExpr(ctx: antlr.SqlParser.ExprContext): Unit = {
+        val text = ctx.getText
+        println("exit: " + text + " children: " + ctx.children.size())
+        if (ctx.children.size() == 3) {
+          println("binary operator " + ctx.children.get(1).getText + " " + operators)
           val operatorValue = SqlOperatorValue.fromString(ctx.children.get(1).getText)
-          val (left, right) = (expr.get(0).column_name().getText, expr.get(1).literal_value().getText)
-          selectResult = selectResult.copy(where = Some(SqlBinaryOperator(operatorValue, SqlIdentifier(left), SqlLiteral.fromString(right))))
+          if (operators.size() == 2) {
+            val right = operators.pop()
+            val left = operators.pop()
+            val operator = SqlBinaryOperator(operatorValue, left, right)
+            operators.push(operator)
+            ()
+          } else {
+            val expr = ctx.expr()
+            val (left, right) = (expr.get(0).column_name().getText, expr.get(1).literal_value().getText)
+            val operator = SqlBinaryOperator(operatorValue, SqlIdentifier(left), SqlLiteral.fromString(right))
+            operators.push(operator)
+            ()
+          }
         }
-        lastVisitedNode = None
+      }
+
+      override def exitSelect(ctx: antlr.SqlParser.SelectContext): Unit = {
+        println(s"exitSelect operators: ${operators}" )
+        if (!operators.empty()) {
+          assert(operators.size() == 1)
+          val operator = operators.pop()
+          selectResult = selectResult.copy(where = Some(operator))
+        }
       }
     }, selectContext)
 

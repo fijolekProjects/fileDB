@@ -5,6 +5,7 @@ import org.antlr.v4.runtime.{CharStreams, CommonTokenStream}
 import pl.fijolek.filedb.storage.query.parser.SqlAst._
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 object SqlParser {
   import pl.fijolek.filedb.query.antlr
@@ -60,11 +61,13 @@ object SqlParser {
     insertIntoResult
   }
 
-  //TODO balance where clause tree?
   def parseSelect(query: String): SqlSelect = {
     var selectResult: SqlSelect = SqlSelect(null, List.empty, None)
     val selectContext = createParser(query).select()
     val operators = new java.util.Stack[SqlBinaryOperator]()
+
+    var localOperators: java.util.Stack[SqlBinaryOperator] = null
+    val joiningExpressions = mutable.Set.empty[String]
 
     ParseTreeWalker.DEFAULT.walk(new antlr.SqlBaseListener() {
 
@@ -79,33 +82,56 @@ object SqlParser {
       }
 
       override def enterExpr(ctx: antlr.SqlParser.ExprContext): Unit = {
-        println("enter: " + ctx.getText + " children: " + ctx.children.size())
+        val text = ctx.getText
+        val grouped = isGrouped(text)
+        val leftGroupCount = text.count(_ == '(')
+        val rightGroupCount = text.count(_ == ')')
+        if (grouped && leftGroupCount == 1 && rightGroupCount == 1) {
+          localOperators = new java.util.Stack[SqlBinaryOperator]()
+          ()
+        }
+        if (grouped && leftGroupCount > 1 && rightGroupCount > 1) {
+          joiningExpressions.add(ctx.getText)
+          ()
+        }
       }
 
       override def exitExpr(ctx: antlr.SqlParser.ExprContext): Unit = {
         val text = ctx.getText
-        println("exit: " + text + " children: " + ctx.children.size())
-        if (ctx.children.size() == 3) {
-          println("binary operator " + ctx.children.get(1).getText + " " + operators)
+        val operatorsStack = if (localOperators == null) operators else localOperators
+        if (!isGrouped(text) && ctx.children.size() == 3) {
           val operatorValue = SqlOperatorValue.fromString(ctx.children.get(1).getText)
-          if (operators.size() == 2) {
-            val right = operators.pop()
-            val left = operators.pop()
+          if (operatorsStack.size() == 2) {
+            val right = operatorsStack.pop()
+            val left = operatorsStack.pop()
             val operator = SqlBinaryOperator(operatorValue, left, right)
-            operators.push(operator)
+            operatorsStack.push(operator)
             ()
           } else {
             val expr = ctx.expr()
             val (left, right) = (expr.get(0).column_name().getText, expr.get(1).literal_value().getText)
             val operator = SqlBinaryOperator(operatorValue, SqlIdentifier(left), SqlLiteral.fromString(right))
-            operators.push(operator)
+            operatorsStack.push(operator)
             ()
           }
+        }
+
+        if (isGrouped(text) && !joiningExpressions.contains(text)) {
+          operators.addAll(localOperators)
+          localOperators.clear()
+        }
+        if (joiningExpressions.contains(text) && operators.size() == 2) {
+          val operatorValue = SqlOperatorValue.fromString(ctx.children.get(1).getText)
+          val right = operators.pop()
+          val left = operators.pop()
+          val operator = SqlBinaryOperator(operatorValue, left, right)
+          operators.push(operator)
+          joiningExpressions.remove(text)
+          ()
         }
       }
 
       override def exitSelect(ctx: antlr.SqlParser.SelectContext): Unit = {
-        println(s"exitSelect operators: ${operators}" )
         if (!operators.empty()) {
           assert(operators.size() == 1)
           val operator = operators.pop()
@@ -115,6 +141,10 @@ object SqlParser {
     }, selectContext)
 
     selectResult
+  }
+
+  private def isGrouped(text: String) = {
+    text.startsWith("(") && text.endsWith(")")
   }
 
   private def createParser(query: String): antlr.SqlParser = {

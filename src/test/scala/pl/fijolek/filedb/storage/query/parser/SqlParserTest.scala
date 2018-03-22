@@ -88,6 +88,48 @@ class SqlParserTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
         )
       )
     }
+
+    scenario("select with where AND clause #3'") {
+      val selectResult = SqlParser.parseSelect("SELECT * FROM FOO WHERE (BAR = 3 AND ID = 1) AND (BAZ = 4 AND QUX = 5)")
+
+      selectResult.selectList shouldBe List(SqlIdentifier("*"))
+      selectResult.from shouldBe SqlIdentifier("FOO")
+
+      selectResult.where shouldBe Some(
+        AND(
+          AND(EQ("BAR", 3), EQ("ID", 1)),
+          AND(EQ("BAZ", 4), EQ("QUX", 5))
+        )
+      )
+    }
+
+    scenario("select with AND and OR within where clause #1") {
+      val selectResult = SqlParser.parseSelect("SELECT * FROM FOO WHERE (BAR = 3 AND ID = 1) OR (BAZ = 4 AND QUX = 5)")
+
+      selectResult.selectList shouldBe List(SqlIdentifier("*"))
+      selectResult.from shouldBe SqlIdentifier("FOO")
+
+      selectResult.where shouldBe Some(
+        OR(
+          AND(EQ("BAR", 3), EQ("ID", 1)),
+          AND(EQ("BAZ", 4), EQ("QUX", 5))
+        )
+      )
+    }
+
+    scenario("select with AND and OR within where clause #2") {
+      val selectResult = SqlParser.parseSelect("SELECT * FROM FOO WHERE (BAR = 3 AND ID = 1 AND FOO = 6) OR (BAZ = 4 AND QUX = 5)")
+
+      selectResult.selectList shouldBe List(SqlIdentifier("*"))
+      selectResult.from shouldBe SqlIdentifier("FOO")
+
+      selectResult.where shouldBe Some(
+        OR(
+          AND(AND(EQ("BAR", 3), EQ("ID", 1)), EQ("FOO", 6)),
+          AND(EQ("BAZ", 4), EQ("QUX", 5))
+        )
+      )
+    }
   }
 
   object WhereTreeBuilder {
@@ -98,6 +140,11 @@ class SqlParserTest extends FeatureSpec with Matchers with BeforeAndAfterEach {
     def AND(left: SqlBinaryOperator, right: SqlBinaryOperator): SqlBinaryOperator = {
       SqlBinaryOperator(AndOperatorValue, left, right)
     }
+
+    def OR(left: SqlBinaryOperator, right: SqlBinaryOperator): SqlBinaryOperator = {
+      SqlBinaryOperator(OrOperatorValue, left, right)
+    }
+
 
   }
 }

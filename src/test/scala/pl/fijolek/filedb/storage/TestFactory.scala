@@ -33,6 +33,15 @@ object TestData {
     )
   )
 
+  val extendedInstructorTableData = TableData(
+    name = "instructor",
+    columnsDefinition = List(
+      Column("ID", ColumnTypes.BigInt),
+      Column("name", ColumnTypes.Varchar(20)),
+      Column("subject", ColumnTypes.Varchar(10))
+    )
+  )
+
   val largeInstructorTableData = TableData(
     name = "instructor",
     columnsDefinition = List(
@@ -45,6 +54,14 @@ object TestData {
     Record(List(
       Value(Column("ID", ColumnTypes.BigInt), id),
       Value(Column("name", ColumnTypes.Varchar(20)), name)
+    ))
+  }
+
+  def extendedInstructorRecord(id: Long, name: String, subject: String): Record = {
+    Record(List(
+      Value(Column("ID", ColumnTypes.BigInt), id),
+      Value(Column("name", ColumnTypes.Varchar(20)), name),
+      Value(Column("subject", ColumnTypes.Varchar(10)), subject)
     ))
   }
 

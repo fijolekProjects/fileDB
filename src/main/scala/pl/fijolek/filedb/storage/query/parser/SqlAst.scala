@@ -5,7 +5,7 @@ import scala.util.Try
 object SqlAst {
   sealed trait SqlNode
   case class SqlBinaryOperator(operator: SqlOperatorValue, leftOperand: SqlNode, rightOperand: SqlNode) extends SqlNode
-  case class SqlSelect(from: SqlNode, selectList: List[SqlIdentifier], where: Option[SqlBinaryOperator]) extends SqlNode
+  case class SqlSelect(from: SqlIdentifier, selectList: List[SqlIdentifier], where: Option[SqlBinaryOperator]) extends SqlNode
   case class SqlIdentifier(name: String) extends SqlNode {
     def isStar = name == "*"
   }
@@ -25,6 +25,7 @@ object SqlAst {
 
   sealed trait SqlOperatorValue
   case object AndOperatorValue extends SqlOperatorValue
+  case object OrOperatorValue extends SqlOperatorValue
   case object EqualsOperatorValue extends SqlOperatorValue
   case object NotEqualsOperatorValue extends SqlOperatorValue
   object SqlOperatorValue {
@@ -33,6 +34,7 @@ object SqlAst {
         case "=" => EqualsOperatorValue
         case "!=" => NotEqualsOperatorValue
         case "AND" => AndOperatorValue
+        case "OR" => OrOperatorValue
       }
     }
   }

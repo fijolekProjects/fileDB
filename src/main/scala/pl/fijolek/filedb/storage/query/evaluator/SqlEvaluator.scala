@@ -33,39 +33,40 @@ class SqlEvaluator(fileManager: FileManager) {
         fileManager.readRecords(name).filter { r =>
           sqlSelect.where match {
             case Some(binOp) =>
-              val left = evalNode(binOp.leftOperand, r)
-              val right = evalNode(binOp.rightOperand, r)
-              binOp.operator match {
-                case EqualsOperatorValue =>
-                  left == right
-                case NotEqualsOperatorValue =>
-                  left != right
-                case AndOperatorValue =>
-                  ???
-              }
+              eval(binOp, r)
             case None =>
               true
           }
         }
-      case _: SqlBigIntLiteral | _: SqlStringLiteral | _: SqlSelect | _: SqlBinaryOperator =>
-        ???
     }
     result.map(rec => rec.copy(values = projection(sqlSelect.selectList, rec.values)))
   }
 
-  private def evalNode(node: SqlNode, r: Record): Any = {
-    node match {
+  private def eval(binaryOperator: SqlBinaryOperator, r: Record): Boolean = {
+    def evalNode(operand: SqlNode): Any = operand match {
       case SqlBigIntLiteral(value) =>
         BigDecimal.apply(value)
       case SqlStringLiteral(value) =>
         value
       case SqlIdentifier(columnName) =>
         r.values.find(_.belongsToColumn(columnName)).get.value
-      case s: SqlSelect =>
-        evaluateSelect(s)
-      case _: SqlBinaryOperator =>
+      case bin: SqlBinaryOperator =>
+        val left = evalNode(bin.leftOperand)
+        val right = evalNode(bin.rightOperand)
+        bin.operator match {
+          case EqualsOperatorValue =>
+            left == right
+          case NotEqualsOperatorValue =>
+            left != right
+          case AndOperatorValue =>
+            left.asInstanceOf[Boolean] && right.asInstanceOf[Boolean]
+          case OrOperatorValue =>
+            left.asInstanceOf[Boolean] || right.asInstanceOf[Boolean]
+        }
+      case _: SqlSelect =>
         ???
     }
+    evalNode(binaryOperator).asInstanceOf[Boolean]
   }
 
   private def projection(selectList: List[SqlIdentifier], values: List[Value]): List[Value] = {

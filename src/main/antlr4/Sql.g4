@@ -27,12 +27,12 @@ result_column
 ;
 
 expr
- : literal_value
- | column_name
- | expr ( '=' | '!=') expr
- | expr K_AND expr
- | expr K_OR expr
- | '(' expr ')'
+ : literal_value #expr_literal
+ | column_name #expr_column_name
+ | expr ( '=' | '!=') expr #expr_comparison
+ | expr K_AND expr #expr_and
+ | expr K_OR expr #expr_or
+ | '(' expr ')' #expr_group
 ;
 
 index_name
